@@ -85,6 +85,26 @@ export class BlockEditor {
 				e.preventDefault();
 				this.mergeBlock(blockId);
 			}
+		} else if (e.key === "ArrowUp") {
+			// 현재 커서의 위치를 얻기
+			const selection = window.getSelection();
+			const currentOffset = selection?.anchorOffset || 0;
+			const blockIndex = this.state.findIndex((block) => block.id === blockId);
+			if (blockIndex > 0) {
+				e.preventDefault();
+				const prevBlock = this.state[blockIndex - 1];
+				this.focusBlock(prevBlock.id, currentOffset);
+			}
+		} else if (e.key === "ArrowDown") {
+			// 현재 커서의 위치를 얻기
+			const selection = window.getSelection();
+			const currentOffset = selection?.anchorOffset || 0;
+			const blockIndex = this.state.findIndex((block) => block.id === blockId);
+			if (blockIndex < this.state.length - 1) {
+				e.preventDefault();
+				const nextBlock = this.state[blockIndex + 1];
+				this.focusBlock(nextBlock.id, currentOffset);
+			}
 		}
 	}
 
@@ -174,3 +194,4 @@ export class BlockEditor {
 		}
 	}
 }
+// up -> 현재 focus block 찾기. 현재 focus block index -1 에 위치한 block에 focusBlock
