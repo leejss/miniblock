@@ -9,8 +9,15 @@ type Block = {
 export class BlockEditor {
 	private state: Block[];
 	private root: HTMLElement;
+
+	private isMenuOpen: boolean = false;
+	private activeBlockId: string | null = null;
+	private activeMenuIndex = 0;
+	private slashMenuEl: HTMLElement | null = null;
+
 	constructor(rootId: string) {
 		this.root = document.getElementById(rootId) as HTMLElement;
+		this.slashMenuEl = document.getElementById("slash-menu");
 		this.state = [
 			{
 				id: this.generateId(),
@@ -49,15 +56,21 @@ export class BlockEditor {
 		this.updateDebugger();
 	}
 
-	// Events
 	private handleInput(e: InputEvent, blockId: string) {
-		// Update target state
 		const text = (e.target as HTMLElement).innerText;
 		const block = this.state.find((b) => b.id === blockId);
 		if (block) {
 			block.content = text;
 		}
 		this.updateDebugger();
+
+		// 슬래시 텍스트를 감지한다.
+		const isSlashComamnd = text === "/" || text.endsWith(" /");
+		if (isSlashComamnd) {
+			this.showSlashMenu(e.target as HTMLElement, blockId);
+		} else {
+			this.hideSlashMenu();
+		}
 	}
 
 	private updateDebugger() {
@@ -68,11 +81,26 @@ export class BlockEditor {
 		}
 	}
 
-	// Enter -> split existing block into two blocks or create new block if cursor is at the end of the block
-	// Backspace -> merge current block with previous block if cursor is at the beginning of the block
 	private handleKeydown(e: KeyboardEvent, blockId: string) {
 		// e.key에 따른 행동 정의하기
 		if (e.isComposing) return;
+
+		if (this.isMenuOpen) {
+			if (e.key === "ArrowDown") {
+				e.preventDefault();
+				this.navigateMenu(1);
+			} else if (e.key === "ArrowUp") {
+				e.preventDefault();
+				this.navigateMenu(-1);
+			} else if (e.key === "Escape") {
+				e.preventDefault();
+				this.hideSlashMenu();
+			} else if (e.key === "Enter") {
+				e.preventDefault();
+				this.selectMenuItem();
+			}
+			return;
+		}
 
 		if (e.key === "Enter") {
 			e.preventDefault();
@@ -193,5 +221,108 @@ export class BlockEditor {
 			console.warn("Failed to set caret position", err);
 		}
 	}
+
+	private showSlashMenu(blockEl: HTMLElement, blockId: string) {
+		if (!this.slashMenuEl) return;
+
+		this.isMenuOpen = true;
+		this.activeBlockId = blockId;
+		this.activeMenuIndex = 0;
+
+		const rect = blockEl.getBoundingClientRect();
+		// ? slash menu 를 띄울 위치를 어떻게 계산할까?. 절대좌표와 상대좌표
+
+		const top = rect.bottom + window.scrollY;
+		const left = rect.left + window.scrollX;
+
+		this.slashMenuEl.style.display = "block";
+		this.slashMenuEl.style.top = `${top}px`;
+		this.slashMenuEl.style.left = `${left}px`;
+
+		this.updateMenuHighlight();
+	}
+	private hideSlashMenu() {
+		if (!this.slashMenuEl) return;
+
+		this.isMenuOpen = false;
+		this.activeBlockId = null;
+		this.slashMenuEl.style.display = "none";
+	}
+
+	private updateMenuHighlight() {
+		if (!this.slashMenuEl) return;
+
+		// Menu items
+		const items = document.querySelectorAll(".slash-menu-item");
+		items.forEach((item, index) => {
+			if (index === this.activeMenuIndex) {
+				item.classList.add("active");
+				item.scrollIntoView({ block: "nearest" });
+			} else {
+				item.classList.remove("active");
+			}
+		});
+	}
+
+	private navigateMenu(direction: number) {
+		if (!this.slashMenuEl) return;
+
+		const items = this.slashMenuEl.querySelectorAll(".slash-menu-item");
+		const count = items.length;
+		if (count === 0) return;
+
+		// 모듈러 연산
+		this.activeMenuIndex = (this.activeMenuIndex + direction + count) % count;
+		this.updateMenuHighlight();
+	}
+
+	private selectMenuItem() {
+		if (!this.slashMenuEl || !this.activeBlockId) return;
+		const items = this.slashMenuEl.querySelectorAll(".slash-menu-item");
+		const activeItem = items[this.activeMenuIndex] as HTMLElement;
+		if (!activeItem) return;
+		const selectedType = activeItem.dataset.type as string;
+		this.changeBlockType(this.activeBlockId, selectedType);
+	}
+
+	private changeBlockType(blockId: string, type: string) {
+		const blockIndex = this.state.findIndex((b) => b.id === blockId);
+		if (blockIndex === -1) return;
+
+		const currentBlock = this.state[blockIndex];
+		// cleaning: slash 제거하기
+
+		let cleanContent = currentBlock.content;
+		if (cleanContent.endsWith(" /")) {
+			cleanContent = cleanContent.slice(0, -2);
+		} else if (cleanContent === "/") {
+			cleanContent = "";
+		}
+
+		if (cleanContent === "") {
+			// 현재 블록의 타입을 바꾼다.
+			currentBlock.content = "";
+			currentBlock.type = type;
+			this.hideSlashMenu();
+			this.render();
+
+			setTimeout(() => {
+				this.focusBlock(currentBlock.id, 0);
+			}, 0);
+		} else {
+			currentBlock.content = cleanContent;
+			const newBlock = {
+				id: this.generateId(),
+				content: "",
+				type,
+			};
+
+			this.state.splice(blockIndex + 1, 0, newBlock);
+			this.hideSlashMenu();
+			this.render();
+			setTimeout(() => {
+				this.focusBlock(newBlock.id, 0);
+			}, 0);
+		}
+	}
 }
-// up -> 현재 focus block 찾기. 현재 focus block index -1 에 위치한 block에 focusBlock
