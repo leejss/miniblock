@@ -1,8 +1,0 @@
-React event
-→ core command 호출
-→ core가 state 변경
-→ React는 subscribe로 다시 그림
-
-Enter 기본 DOM 동작 차단
-→ core state 변경
-→ React render
