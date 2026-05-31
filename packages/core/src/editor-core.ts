@@ -44,25 +44,25 @@ export class MiniBlockCore {
 	}
 
 	// 특정 블록 뒤에 새 블록을 넣는다.
-	private insertBlockAfter(id: string, block?: Block) {
+	insertBlockAfter(id: string, block?: Block) {
 		const index = this.blocks.findIndex((block) => block.id === id);
 		if (index === -1) return;
 
 		const nextBlock = block ?? this.createBlock();
 		this.blocks = [
-			...this.blocks.splice(0, index + 1),
+			...this.blocks.slice(0, index + 1),
 			nextBlock,
 			...this.blocks.slice(index + 1),
 		];
 		this.emit();
 	}
 
-	private deleteBlock(id: string) {
-		this.blocks = this.blocks.filter((block) => block.id === id);
+	deleteBlock(id: string) {
+		this.blocks = this.blocks.filter((block) => block.id !== id);
 		this.emit();
 	}
 
-	private splitBlock(id: string, offset: number) {
+	splitBlock(id: string, offset: number) {
 		const index = this.blocks.findIndex((block) => block.id === id);
 		if (index === -1) return;
 
@@ -83,5 +83,7 @@ export class MiniBlockCore {
 			newBlock,
 			...this.blocks.slice(index + 1),
 		];
+
+		this.emit();
 	}
 }

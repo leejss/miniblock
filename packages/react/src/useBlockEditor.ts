@@ -19,5 +19,8 @@ export function useBlockEditor(options: UseBlockEditorOptions) {
 		blocks,
 		// meaning of bind:
 		updateBlock: editor.updateBlock.bind(editor),
+		insertBlockAfter: editor.insertBlockAfter.bind(editor),
+		deleteBlock: editor.deleteBlock.bind(editor),
+		splitBlock: editor.splitBlock.bind(editor),
 	};
 }

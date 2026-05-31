@@ -7,7 +7,7 @@ export type BlockEditorProps = {
 };
 
 export function BlockEditor({ initialState }: BlockEditorProps) {
-	const { blocks, updateBlock } = useBlockEditor({ initialState });
+	const { blocks, updateBlock, splitBlock } = useBlockEditor({ initialState });
 
 	return (
 		<div>
@@ -23,6 +23,16 @@ export function BlockEditor({ initialState }: BlockEditorProps) {
 							updateBlock(block.id, {
 								content: event.currentTarget.textContent ?? "",
 							});
+						}}
+						onKeyDown={(event) => {
+							if (event.key !== "Enter") return;
+
+							event.preventDefault();
+
+							const selection = window.getSelection();
+							const offset = selection?.anchorOffset ?? 0;
+
+							splitBlock(block.id, offset);
 						}}
 					>
 						{block.content}
