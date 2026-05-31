@@ -62,9 +62,9 @@ export class MiniBlockCore {
 		this.emit();
 	}
 
-	splitBlock(id: string, offset: number) {
+	splitBlock(id: string, offset: number): string | null {
 		const index = this.blocks.findIndex((block) => block.id === id);
-		if (index === -1) return;
+		if (index === -1) return null;
 
 		const block = this.blocks[index];
 		const before = block.content.slice(0, offset);
@@ -85,5 +85,6 @@ export class MiniBlockCore {
 		];
 
 		this.emit();
+		return newBlock.id;
 	}
 }
