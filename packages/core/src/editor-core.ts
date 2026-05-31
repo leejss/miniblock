@@ -87,4 +87,29 @@ export class MiniBlockCore {
 		this.emit();
 		return newBlock.id;
 	}
+
+	mergeBlockBackward(id: string) {
+		const index = this.blocks.findIndex((block) => block.id === id);
+		if (index === -1) return null;
+
+		const currentBlock = this.blocks[index];
+		const previousBlock = this.blocks[index - 1];
+		const offset = previousBlock.content.length;
+
+		const mergedBlock = {
+			...previousBlock,
+			content: previousBlock.content + currentBlock.content,
+		};
+
+		this.blocks = [
+			...this.blocks.slice(0, index - 1),
+			mergedBlock,
+			...this.blocks.slice(index + 1),
+		];
+		this.emit();
+		return {
+			id: previousBlock.id,
+			offset,
+		};
+	}
 }

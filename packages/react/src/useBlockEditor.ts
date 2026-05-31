@@ -22,5 +22,6 @@ export function useBlockEditor(options: UseBlockEditorOptions) {
 		insertBlockAfter: editor.insertBlockAfter.bind(editor),
 		deleteBlock: editor.deleteBlock.bind(editor),
 		splitBlock: editor.splitBlock.bind(editor),
+		mergeBlockBackward: editor.mergeBlockBackward.bind(editor),
 	};
 }

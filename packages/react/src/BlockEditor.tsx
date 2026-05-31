@@ -8,7 +8,8 @@ export type BlockEditorProps = {
 };
 
 export function BlockEditor({ initialState }: BlockEditorProps) {
-	const { blocks, updateBlock, splitBlock } = useBlockEditor({ initialState });
+	const { blocks, updateBlock, splitBlock, mergeBlockBackward } =
+		useBlockEditor({ initialState });
 	const blocksRef = useRef(new Map<string, HTMLElement>());
 
 	return (
@@ -34,23 +35,48 @@ export function BlockEditor({ initialState }: BlockEditorProps) {
 							});
 						}}
 						onKeyDown={(event) => {
-							if (event.key !== "Enter") return;
+							if (event.key === "Enter") {
+								event.preventDefault();
 
-							event.preventDefault();
+								const selection = window.getSelection();
+								const offset = selection?.anchorOffset ?? 0;
 
-							const selection = window.getSelection();
-							const offset = selection?.anchorOffset ?? 0;
+								const nextBlockId = splitBlock(block.id, offset);
+								if (nextBlockId === null) return;
 
-							const nextBlockId = splitBlock(block.id, offset);
-							if (nextBlockId === null) return;
+								requestAnimationFrame(() => {
+									const nextBlock = blocksRef.current.get(nextBlockId);
 
-							requestAnimationFrame(() => {
-								const nextBlock = blocksRef.current.get(nextBlockId);
+									if (!nextBlock) return;
 
-								if (!nextBlock) return;
+									focusBlock(nextBlock, 0);
+								});
+								return;
+							}
 
-								focusBlock(nextBlock, 0);
-							});
+							if (event.key === "Backspace") {
+								// mergeBlockBackward
+								// caret의 위치가 처음인 경우에 merge
+
+								const selection = window.getSelection();
+								const isAtStart =
+									selection?.isCollapsed && selection.anchorOffset === 0;
+
+								if (!isAtStart) return;
+								event.preventDefault();
+
+								const target = mergeBlockBackward(block.id);
+								if (!target) return;
+
+								requestAnimationFrame(() => {
+									const targetBlock = blocksRef.current.get(target.id);
+									if (!targetBlock) return;
+
+									focusBlock(targetBlock, target.offset);
+								});
+
+								return;
+							}
 						}}
 					>
 						{block.content}
