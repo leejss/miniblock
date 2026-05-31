@@ -130,4 +130,31 @@ export class MiniBlockCore {
 			offset: previousBlock.content.length,
 		};
 	}
+
+	changeBlockType(id: string, type: BlockType): FocusTarget | null {
+		const index = this.blocks.findIndex((block) => block.id === id);
+		if (index === -1) return null;
+
+		const block = this.blocks[index];
+
+		const newContent =
+			block.content === "/" ? "" : block.content.replace(/ \/$/, "");
+
+		this.blocks = this.blocks.map((block) =>
+			block.id === id
+				? {
+						...block,
+						type,
+						content: newContent,
+					}
+				: block,
+		);
+
+		this.emit();
+
+		return {
+			id,
+			offset: newContent.length,
+		};
+	}
 }

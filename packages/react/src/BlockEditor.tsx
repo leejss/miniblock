@@ -1,6 +1,21 @@
 import type { Block, BlockType } from "@miniblock/core";
-import { useRef } from "react";
+import { act, useRef, useState } from "react";
 import { useBlockEditor } from "./useBlockEditor";
+
+type SlashMenuState = {
+	blockId: string;
+	activeIndex: number;
+};
+
+const slashItems = [
+	{ label: "Text", type: "p" },
+	{ label: "Heading 1", type: "h1" },
+	{ label: "Heading 2", type: "h2" },
+	{ label: "Heading 3", type: "h3" },
+	{ label: "Quote", type: "blockquote" },
+	{ label: "Code", type: "pre" },
+] as const;
+
 export type BlockEditorProps = {
 	initialState: Block[];
 	onChange?: (blocks: Block[]) => void;
@@ -13,8 +28,24 @@ export function BlockEditor({ initialState, onChange }: BlockEditorProps) {
 		splitBlock,
 		mergeBlockBackward,
 		deleteBlockBackward,
+		changeBlockType,
 	} = useBlockEditor({ initialState, onChange });
 	const blocksRef = useRef(new Map<string, HTMLElement>());
+	const [slashMenu, setSlashMenu] = useState<SlashMenuState | null>(null);
+
+	const selectSlashItem = (type: BlockType) => {
+		if (!slashMenu) return;
+		const target = changeBlockType(slashMenu.blockId, type);
+
+		setSlashMenu(null);
+		if (!target) return;
+
+		requestAnimationFrame(() => {
+			const element = blocksRef.current.get(target.id);
+			if (!element) return;
+			focusBlock(element, target.offset);
+		});
+	};
 
 	return (
 		<div>
@@ -38,11 +69,70 @@ export function BlockEditor({ initialState, onChange }: BlockEditorProps) {
 						contentEditable
 						suppressContentEditableWarning
 						onInput={(event) => {
+							const content = event.currentTarget.textContent ?? "";
 							updateBlock(block.id, {
-								content: event.currentTarget.textContent ?? "",
+								content,
 							});
+
+							if (content === "/" || content.endsWith(" /")) {
+								// Open menu
+								setSlashMenu({
+									blockId: block.id,
+									activeIndex: 0,
+								});
+							} else {
+								// Hide menu
+								setSlashMenu(null);
+							}
 						}}
 						onKeyDown={(event) => {
+							if (slashMenu?.blockId === block.id) {
+								if (event.key === "ArrowDown") {
+									event.preventDefault();
+
+									setSlashMenu((menu) =>
+										menu
+											? {
+													...menu,
+													activeIndex:
+														(menu.activeIndex + 1) % slashItems.length,
+												}
+											: menu,
+									);
+									return;
+								}
+
+								if (event.key === "ArrowUp") {
+									event.preventDefault();
+
+									setSlashMenu((menu) =>
+										menu
+											? {
+													...menu,
+													activeIndex:
+														(menu.activeIndex - 1 + slashItems.length) %
+														slashItems.length,
+												}
+											: menu,
+									);
+									return;
+								}
+
+								if (event.key === "Enter") {
+									event.preventDefault();
+									const item = slashItems[slashMenu.activeIndex];
+									selectSlashItem(item.type);
+
+									return;
+								}
+
+								if (event.key === "Escape") {
+									event.preventDefault();
+									setSlashMenu(null);
+									return;
+								}
+							}
+
 							if (event.key === "Enter") {
 								event.preventDefault();
 
@@ -111,6 +201,23 @@ export function BlockEditor({ initialState, onChange }: BlockEditorProps) {
 					/>
 				);
 			})}
+			{slashMenu ? (
+				<div className="slash-menu">
+					{slashItems.map((item, index) => (
+						<button
+							key={item.type}
+							type="button"
+							className={index === slashMenu.activeIndex ? "active" : ""}
+							onMouseDown={(event) => {
+								event.preventDefault();
+								selectSlashItem(item.type);
+							}}
+						>
+							{item.label}
+						</button>
+					))}
+				</div>
+			) : null}
 		</div>
 	);
 }
