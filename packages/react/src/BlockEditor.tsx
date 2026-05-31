@@ -8,8 +8,13 @@ export type BlockEditorProps = {
 };
 
 export function BlockEditor({ initialState }: BlockEditorProps) {
-	const { blocks, updateBlock, splitBlock, mergeBlockBackward } =
-		useBlockEditor({ initialState });
+	const {
+		blocks,
+		updateBlock,
+		splitBlock,
+		mergeBlockBackward,
+		deleteBlockBackward,
+	} = useBlockEditor({ initialState });
 	const blocksRef = useRef(new Map<string, HTMLElement>());
 
 	return (
@@ -65,11 +70,14 @@ export function BlockEditor({ initialState }: BlockEditorProps) {
 								const selection = window.getSelection();
 								const isAtStart =
 									selection?.isCollapsed && selection.anchorOffset === 0;
-
 								if (!isAtStart) return;
 								event.preventDefault();
 
-								const target = mergeBlockBackward(block.id);
+								const isEmpty = (event.currentTarget.textContent ?? "") === "";
+								const target = isEmpty
+									? deleteBlockBackward(block.id)
+									: mergeBlockBackward(block.id);
+
 								if (!target) return;
 
 								requestAnimationFrame(() => {

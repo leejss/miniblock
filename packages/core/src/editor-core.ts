@@ -90,7 +90,7 @@ export class MiniBlockCore {
 
 	mergeBlockBackward(id: string) {
 		const index = this.blocks.findIndex((block) => block.id === id);
-		if (index === -1) return null;
+		if (index <= 0) return null;
 
 		const currentBlock = this.blocks[index];
 		const previousBlock = this.blocks[index - 1];
@@ -110,6 +110,24 @@ export class MiniBlockCore {
 		return {
 			id: previousBlock.id,
 			offset,
+		};
+	}
+
+	deleteBlockBackward(id: string) {
+		const index = this.blocks.findIndex((block) => block.id === id);
+		if (index <= 0) return null;
+
+		const previousBlock = this.blocks[index - 1];
+		this.blocks = [
+			...this.blocks.slice(0, index),
+			...this.blocks.slice(index + 1),
+		];
+
+		this.emit();
+
+		return {
+			id: previousBlock.id,
+			offset: previousBlock.content.length,
 		};
 	}
 }
