@@ -1,38 +1,41 @@
-// GOAL: Split block, Merge block, Focus block with handling keydown event
-
-type Block = {
+export type Block = {
 	id: string;
 	content: string;
 	type: string;
 };
 
-export class BlockEditor {
+export type MiniBlockEditorConfig = {
+	rootId: string;
+	slashMenuId?: string;
+	debuggerId?: string;
+	initialState?: Block[];
+	onChange?: (state: Block[]) => void;
+};
+
+export class MiniBlockEditor {
 	private state: Block[];
 	private root: HTMLElement;
+	private slashMenuEl: HTMLElement | null = null;
+	private debuggerEl: HTMLElement | null = null;
+
+	private config: MiniBlockEditorConfig;
+	private debounceTimer: number | null = null;
 
 	private isMenuOpen: boolean = false;
 	private activeBlockId: string | null = null;
 	private activeMenuIndex = 0;
-	private slashMenuEl: HTMLElement | null = null;
-	private debounceTimer: number | null = null;
 
-	constructor(rootId: string) {
-		this.root = document.getElementById(rootId) as HTMLElement;
-		this.slashMenuEl = document.getElementById("slash-menu");
+	constructor(config: MiniBlockEditorConfig) {
+		this.config = config;
 
-		const savedState = localStorage.getItem("block_editor_state");
-
-		if (savedState) {
-			try {
-				this.state = JSON.parse(savedState);
-			} catch (e) {
-				console.error("Failed to parse saved state", e);
-				this.state = [];
-			}
-		} else {
-			this.state = [];
+		this.root = document.getElementById(config.rootId) as HTMLElement;
+		if (config.slashMenuId) {
+			this.slashMenuEl = document.getElementById(config.slashMenuId);
 		}
-
+		if (config.debuggerId) {
+			this.debuggerEl = document.getElementById(config.debuggerId);
+		}
+		this.state = config.initialState || [];
 		this.init();
 	}
 
@@ -337,29 +340,21 @@ export class BlockEditor {
 		}
 	}
 
-	private persistState() {
-		try {
-			localStorage.setItem("block_editor_state", JSON.stringify(this.state));
-		} catch (err) {
-			console.error("Failed to save state to localStorage", err);
-		}
-	}
-
 	private dispatchStateChange(isStructureChange: boolean = false) {
+		if (!this.config.onChange) return;
+
 		if (isStructureChange) {
 			if (this.debounceTimer) {
 				clearTimeout(this.debounceTimer);
 				this.debounceTimer = null;
 			}
-
-			this.persistState();
+			this.config.onChange(this.state);
 		} else {
 			if (this.debounceTimer) {
 				clearTimeout(this.debounceTimer);
 			}
-
 			this.debounceTimer = setTimeout(() => {
-				this.persistState();
+				this.config.onChange?.(this.state);
 				this.debounceTimer = null;
 			}, 500);
 		}

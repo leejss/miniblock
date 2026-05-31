@@ -1,3 +1,3 @@
-import { BlockEditor } from "./editor";
+import { MiniBlockEditor } from "../packages/core/src/editor";
 
-new BlockEditor("app");
+new MiniBlockEditor("app");

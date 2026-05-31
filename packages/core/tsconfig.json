@@ -1,0 +1,9 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"outDir": "./dist",
+		// 개발 도중 타입 체킹용으로 사용 시 에밋(출력) 방지
+		"noEmit": true
+	},
+	"include": ["src/**/*"]
+}

@@ -1,15 +1,20 @@
 {
-  "name": "blockeditor",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
-  },
-  "devDependencies": {
-    "typescript": "~6.0.2",
-    "vite": "^8.0.12"
-  }
+	"name": "miniblock-monorepo",
+	"private": true,
+	"version": "1.0.0",
+	"type": "module",
+	"scripts": {
+		"dev:core": "pnpm --filter @miniblock/core dev",
+		"dev:react": "pnpm --filter @miniblock/react dev",
+		"dev:demo": "pnpm --filter demo dev",
+		"build:all": "pnpm --filter @miniblock/core build && pnpm --filter @miniblock/react build && pnpm --filter demo build"
+	},
+	"devDependencies": {
+		"typescript": "~6.0.2",
+		"vite": "^8.0.12"
+	},
+	"workspaces": [
+		"packages/*",
+		"apps/*"
+	]
 }
