@@ -14,17 +14,24 @@ export class BlockEditor {
 	private activeBlockId: string | null = null;
 	private activeMenuIndex = 0;
 	private slashMenuEl: HTMLElement | null = null;
+	private debounceTimer: number | null = null;
 
 	constructor(rootId: string) {
 		this.root = document.getElementById(rootId) as HTMLElement;
 		this.slashMenuEl = document.getElementById("slash-menu");
-		this.state = [
-			{
-				id: this.generateId(),
-				content: "Hello World",
-				type: "h1",
-			},
-		];
+
+		const savedState = localStorage.getItem("block_editor_state");
+
+		if (savedState) {
+			try {
+				this.state = JSON.parse(savedState);
+			} catch (e) {
+				console.error("Failed to parse saved state", e);
+				this.state = [];
+			}
+		} else {
+			this.state = [];
+		}
 
 		this.init();
 	}
@@ -52,8 +59,6 @@ export class BlockEditor {
 			el.addEventListener("keydown", (e) => this.handleKeydown(e, block.id));
 			this.root.appendChild(el);
 		});
-
-		this.updateDebugger();
 	}
 
 	private handleInput(e: InputEvent, blockId: string) {
@@ -62,7 +67,8 @@ export class BlockEditor {
 		if (block) {
 			block.content = text;
 		}
-		this.updateDebugger();
+
+		this.dispatchStateChange(false);
 
 		// 슬래시 텍스트를 감지한다.
 		const isSlashComamnd = text === "/" || text.endsWith(" /");
@@ -163,6 +169,8 @@ export class BlockEditor {
 		// Rerendering
 		this.render();
 
+		this.dispatchStateChange(true);
+
 		setTimeout(() => {
 			this.focusBlock(newBlock.id, 0);
 		});
@@ -179,6 +187,7 @@ export class BlockEditor {
 		prevBlock.content += currentBlock.content;
 		this.state.splice(blockIndex, 1);
 		this.render();
+		this.dispatchStateChange(true);
 
 		// Focus to the previous block and set cursor position to the end of the previous block's original content
 		setTimeout(() => {
@@ -305,6 +314,7 @@ export class BlockEditor {
 			currentBlock.type = type;
 			this.hideSlashMenu();
 			this.render();
+			this.dispatchStateChange(true);
 
 			setTimeout(() => {
 				this.focusBlock(currentBlock.id, 0);
@@ -320,9 +330,40 @@ export class BlockEditor {
 			this.state.splice(blockIndex + 1, 0, newBlock);
 			this.hideSlashMenu();
 			this.render();
+			this.dispatchStateChange(true);
 			setTimeout(() => {
 				this.focusBlock(newBlock.id, 0);
 			}, 0);
 		}
+	}
+
+	private persistState() {
+		try {
+			localStorage.setItem("block_editor_state", JSON.stringify(this.state));
+		} catch (err) {
+			console.error("Failed to save state to localStorage", err);
+		}
+	}
+
+	private dispatchStateChange(isStructureChange: boolean = false) {
+		if (isStructureChange) {
+			if (this.debounceTimer) {
+				clearTimeout(this.debounceTimer);
+				this.debounceTimer = null;
+			}
+
+			this.persistState();
+		} else {
+			if (this.debounceTimer) {
+				clearTimeout(this.debounceTimer);
+			}
+
+			this.debounceTimer = setTimeout(() => {
+				this.persistState();
+				this.debounceTimer = null;
+			}, 500);
+		}
+
+		this.updateDebugger();
 	}
 }
