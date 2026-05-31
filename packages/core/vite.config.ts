@@ -6,7 +6,6 @@ export default defineConfig({
 	plugins: [
 		// 빌드 시 dist 폴더 내부에 자동으로 타입 정의(.d.ts)를 생성해주는 플러그인
 		dts({
-			insertTypesEntry: true,
 			tsconfigPath: "./tsconfig.json",
 		}),
 	],
