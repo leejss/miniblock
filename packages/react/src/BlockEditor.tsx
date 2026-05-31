@@ -89,6 +89,25 @@ export function BlockEditor({ initialState }: BlockEditorProps) {
 
 								return;
 							}
+
+							if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+								event.preventDefault();
+
+								const index = blocks.findIndex((item) => item.id === block.id);
+								const nextIndex =
+									event.key === "ArrowUp" ? index - 1 : index + 1;
+
+								const nextBlock = blocks[nextIndex];
+								if (!nextBlock) return;
+
+								const offset = getCaretOffset();
+
+								requestAnimationFrame(() => {
+									const element = blocksRef.current.get(nextBlock.id);
+									if (!element) return;
+									focusBlock(element, offset);
+								});
+							}
 						}}
 					/>
 				);
@@ -119,4 +138,10 @@ function focusBlock(element: HTMLElement, offset: number) {
 	const selection = document.getSelection();
 	selection?.removeAllRanges();
 	selection?.addRange(range);
+}
+
+function getCaretOffset() {
+	const selection = window.getSelection();
+	if (!selection?.isCollapsed) return 0;
+	return selection.anchorOffset;
 }
