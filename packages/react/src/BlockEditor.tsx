@@ -22,6 +22,10 @@ export function BlockEditor({ initialState }: BlockEditorProps) {
 						ref={(el: HTMLElement | null) => {
 							if (el) {
 								blocksRef.current.set(block.id, el);
+
+								if (el.textContent !== block.content) {
+									el.textContent = block.content;
+								}
 							} else {
 								blocksRef.current.delete(block.id);
 							}
@@ -78,9 +82,7 @@ export function BlockEditor({ initialState }: BlockEditorProps) {
 								return;
 							}
 						}}
-					>
-						{block.content}
-					</Tag>
+					/>
 				);
 			})}
 		</div>
