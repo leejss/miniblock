@@ -1,4 +1,4 @@
-import type { Block } from "./editor";
+import type { Block, BlockType, FocusTarget } from "./types";
 
 type Listener = (blocks: Block[]) => void;
 
@@ -35,7 +35,7 @@ export class MiniBlockCore {
 		}
 	}
 
-	private createBlock(content = "", type = "p") {
+	private createBlock(content = "", type: BlockType = "p") {
 		return {
 			id: crypto.randomUUID(),
 			type,
@@ -88,7 +88,7 @@ export class MiniBlockCore {
 		return newBlock.id;
 	}
 
-	mergeBlockBackward(id: string) {
+	mergeBlockBackward(id: string): FocusTarget | null {
 		const index = this.blocks.findIndex((block) => block.id === id);
 		if (index <= 0) return null;
 
@@ -113,7 +113,7 @@ export class MiniBlockCore {
 		};
 	}
 
-	deleteBlockBackward(id: string) {
+	deleteBlockBackward(id: string): FocusTarget | null {
 		const index = this.blocks.findIndex((block) => block.id === id);
 		if (index <= 0) return null;
 

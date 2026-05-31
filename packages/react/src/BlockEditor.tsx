@@ -1,8 +1,6 @@
-import type { Block } from "@miniblock/core";
+import type { Block, BlockType } from "@miniblock/core";
 import { useRef } from "react";
 import { useBlockEditor } from "./useBlockEditor";
-
-type BlockTag = "p" | "h1" | "h2" | "h3" | "blockquote" | "pre";
 export type BlockEditorProps = {
 	initialState: Block[];
 	onChange?: (blocks: Block[]) => void;
@@ -21,7 +19,7 @@ export function BlockEditor({ initialState, onChange }: BlockEditorProps) {
 	return (
 		<div>
 			{blocks.map((block) => {
-				const Tag = block.type as BlockTag;
+				const Tag = block.type as BlockType;
 
 				return (
 					<Tag
