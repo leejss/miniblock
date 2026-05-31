@@ -71,3 +71,19 @@ p[contenteditable] {
 		font-size: 34px;
 	}
 }
+
+.state-panel {
+	width: min(760px, 100%);
+	margin: 20px auto 0;
+	padding: 16px;
+	background: #171717;
+	color: #f7f5f0;
+	border-radius: 6px;
+	overflow: auto;
+}
+
+.state-panel pre {
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.5;
+}

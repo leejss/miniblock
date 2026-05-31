@@ -5,16 +5,17 @@ import { useBlockEditor } from "./useBlockEditor";
 type BlockTag = "p" | "h1" | "h2" | "h3" | "blockquote" | "pre";
 export type BlockEditorProps = {
 	initialState: Block[];
+	onChange?: (blocks: Block[]) => void;
 };
 
-export function BlockEditor({ initialState }: BlockEditorProps) {
+export function BlockEditor({ initialState, onChange }: BlockEditorProps) {
 	const {
 		blocks,
 		updateBlock,
 		splitBlock,
 		mergeBlockBackward,
 		deleteBlockBackward,
-	} = useBlockEditor({ initialState });
+	} = useBlockEditor({ initialState, onChange });
 	const blocksRef = useRef(new Map<string, HTMLElement>());
 
 	return (

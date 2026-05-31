@@ -1,5 +1,6 @@
-import { BlockEditor } from "@miniblock/react";
 import type { Block } from "@miniblock/core";
+import { BlockEditor } from "@miniblock/react";
+import { useState } from "react";
 
 const initialState: Block[] = [
 	{
@@ -20,11 +21,15 @@ const initialState: Block[] = [
 ];
 
 export function App() {
+	const [blocks, setBlocks] = useState(initialState);
 	return (
 		<main className="demo-shell">
 			<section className="editor-surface" aria-label="miniblock editor demo">
-				<BlockEditor initialState={initialState} />
+				<BlockEditor initialState={initialState} onChange={setBlocks} />
 			</section>
+			<aside className="state-panel" aria-label="editor state">
+				<pre>{JSON.stringify(blocks, null, 2)}</pre>
+			</aside>
 		</main>
 	);
 }

@@ -1,7 +1,8 @@
 import { type Block, MiniBlockCore } from "@miniblock/core";
-import { useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 export type UseBlockEditorOptions = {
 	initialState: Block[];
+	onChange?: (blocks: Block[]) => void;
 };
 export function useBlockEditor(options: UseBlockEditorOptions) {
 	const editor = useMemo(() => {
@@ -13,6 +14,10 @@ export function useBlockEditor(options: UseBlockEditorOptions) {
 		() => editor.getBlocks(),
 		() => editor.getBlocks(),
 	);
+
+	useEffect(() => {
+		options.onChange?.(blocks);
+	}, [blocks, options.onChange]);
 
 	return {
 		editor,
