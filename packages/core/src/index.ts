@@ -1,2 +1,2 @@
-export { MiniBlockCore } from "./editor-core";
+export { MiniBlockCore } from "./core";
 export * from "./types";
