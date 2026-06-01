@@ -1,4 +1,4 @@
-.mb-editor.mb-editor {
+.mb-editor {
 	--mb-color-text: #37352f;
 	--mb-color-muted: #787774;
 	--mb-color-bg: #ffffff;
@@ -12,13 +12,16 @@
 	font-family: var(--mb-font-family);
 }
 
-.mb-editor.mb-editor .mb-editor__page {
+.mb-editor .mb-editor__page {
 	max-width: 720px;
 	margin: 0 auto;
 	padding: 96px 96px 40vh;
+
+	/* Positioning context */
+	position: relative;
 }
 
-.mb-editor.mb-editor .mb-block.mb-block {
+.mb-editor .mb-block {
 	margin: 0;
 	min-height: 1.5em;
 	outline: none;
@@ -28,28 +31,28 @@
 	word-break: break-word;
 }
 
-.mb-editor.mb-editor .mb-block.mb-block[data-block-type="h1"] {
+.mb-editor .mb-block[data-block-type="h1"] {
 	font-size: 40px;
 	font-weight: 700;
 	line-height: 1.2;
 	margin-top: 1.4em;
 }
 
-.mb-editor.mb-editor .mb-block.mb-block[data-block-type="blockquote"] {
+.mb-editor .mb-block[data-block-type="blockquote"] {
 	border-left: 3px solid var(--mb-color-text);
 	padding-left: 14px;
 	color: var(--mb-color-muted);
 }
 
-.mb-editor.mb-editor .mb-block.mb-block[data-block-type="pre"] {
+.mb-editor .mb-block[data-block-type="pre"] {
 	background: var(--mb-color-code-bg);
 	border-radius: 6px;
 	font-family: var(--mb-font-mono);
 	padding: 16px;
 }
 
-.mb-editor.mb-editor .mb-slash-menu.mb-slash-menu {
-	position: fixed;
+.mb-editor .mb-slash-menu {
+	position: absolute;
 	width: 280px;
 	padding: 6px;
 	border: 1px solid var(--mb-color-border);
@@ -58,7 +61,7 @@
 	box-shadow: 0 8px 24px rgba(15, 15, 15, 0.12);
 }
 
-.mb-editor.mb-editor .mb-slash-menu.mb-slash-menu button {
+.mb-editor .mb-slash-menu button {
 	width: 100%;
 	height: 32px;
 	border: 0;
@@ -69,7 +72,7 @@
 	border-radius: 4px;
 }
 
-.mb-editor.mb-editor .mb-slash-menu.mb-slash-menu button.active,
-.mb-editor.mb-editor .mb-slash-menu.mb-slash-menu button:hover {
+.mb-editor .mb-slash-menu button.active,
+.mb-editor .mb-slash-menu button:hover {
 	background: var(--mb-color-hover);
 }

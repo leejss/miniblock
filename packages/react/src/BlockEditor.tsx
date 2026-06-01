@@ -8,6 +8,8 @@ import { useBlockEditor } from "./useBlockEditor";
 type SlashMenuState = {
 	blockId: string;
 	activeIndex: number;
+	top: number;
+	left: number;
 };
 
 export type BlockEditorProps = {
@@ -93,10 +95,14 @@ export function BlockEditor({ initialState, onChange }: BlockEditorProps) {
 								});
 
 								if (content === "/" || content.endsWith(" /")) {
+									const { offsetHeight, offsetLeft, offsetTop } =
+										event.currentTarget;
 									// Open menu
 									setSlashMenu({
 										blockId: block.id,
 										activeIndex: 0,
+										top: offsetTop + offsetHeight + 4,
+										left: offsetLeft,
 									});
 								} else {
 									// Hide menu
@@ -223,7 +229,10 @@ export function BlockEditor({ initialState, onChange }: BlockEditorProps) {
 					);
 				})}
 				{slashMenu ? (
-					<div className="mb-slash-menu">
+					<div
+						className="mb-slash-menu"
+						style={{ top: slashMenu.top, left: slashMenu.left }}
+					>
 						{blockCommands.map((item, index) => (
 							<button
 								key={item.type}
