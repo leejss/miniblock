@@ -1,3 +1,5 @@
 # Miniblock Editor
 
-I'am creating minimal notion like block editor from scratch
+## Work In Progress.
+
+minimal notion like block editor from scratch
