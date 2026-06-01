@@ -1,3 +1,4 @@
+import "./styles.css";
 import type { Block, BlockType } from "@miniblock/core";
 import { useRef, useState } from "react";
 import { blockCommands } from "./commands";
@@ -23,6 +24,7 @@ export function BlockEditor({ initialState, onChange }: BlockEditorProps) {
 		deleteBlockBackward,
 		changeBlockType,
 	} = useBlockEditor({ initialState, onChange });
+
 	const blocksRef = useRef(new Map<string, HTMLElement>());
 	const [slashMenu, setSlashMenu] = useState<SlashMenuState | null>(null);
 
@@ -42,195 +44,202 @@ export function BlockEditor({ initialState, onChange }: BlockEditorProps) {
 	};
 
 	return (
-		<div>
-			{blocks.map((block) => {
-				const Tag = block.type as BlockType;
+		<div className="mb-editor">
+			<div className="mb-editor__page">
+				{blocks.map((block) => {
+					const Tag = block.type as BlockType;
 
-				return (
-					<Tag
-						ref={(el: HTMLElement | null) => {
-							if (el) {
-								blocksRef.current.set(block.id, el);
+					return (
+						<Tag
+							className="mb-block"
+							data-block-type={block.type}
+							ref={(el: HTMLElement | null) => {
+								if (el) {
+									blocksRef.current.set(block.id, el);
 
-								if (el.textContent !== block.content) {
-									el.textContent = block.content;
+									if (el.textContent !== block.content) {
+										el.textContent = block.content;
+									}
+								} else {
+									blocksRef.current.delete(block.id);
 								}
-							} else {
-								blocksRef.current.delete(block.id);
-							}
-						}}
-						key={block.id}
-						contentEditable
-						suppressContentEditableWarning
-						onInput={(event) => {
-							const content = event.currentTarget.textContent ?? "";
-							// match shortcut
-							const shortcut = matchTextShortcut(content);
-							if (shortcut) {
-								const target = changeBlockType(
-									block.id,
-									shortcut.type,
-									shortcut.nextContent,
-								);
-								setSlashMenu(null);
-								if (!target) return;
-
-								requestAnimationFrame(() => {
-									const element = blocksRef.current.get(block.id);
-									if (!element) return;
-									focusBlock(element, target.offset);
-								});
-								return;
-							}
-
-							updateBlock(block.id, {
-								content,
-							});
-
-							if (content === "/" || content.endsWith(" /")) {
-								// Open menu
-								setSlashMenu({
-									blockId: block.id,
-									activeIndex: 0,
-								});
-							} else {
-								// Hide menu
-								setSlashMenu(null);
-							}
-						}}
-						onKeyDown={(event) => {
-							if (slashMenu?.blockId === block.id) {
-								if (event.key === "ArrowDown") {
-									event.preventDefault();
-
-									setSlashMenu((menu) =>
-										menu
-											? {
-													...menu,
-													activeIndex:
-														(menu.activeIndex + 1) % blockCommands.length,
-												}
-											: menu,
+							}}
+							key={block.id}
+							contentEditable
+							suppressContentEditableWarning
+							onInput={(event) => {
+								const content = event.currentTarget.textContent ?? "";
+								// match shortcut
+								const shortcut = matchTextShortcut(content);
+								if (shortcut) {
+									const target = changeBlockType(
+										block.id,
+										shortcut.type,
+										shortcut.nextContent,
 									);
+									setSlashMenu(null);
+									if (!target) return;
+
+									requestAnimationFrame(() => {
+										const element = blocksRef.current.get(block.id);
+										if (!element) return;
+										focusBlock(element, target.offset);
+									});
 									return;
 								}
 
-								if (event.key === "ArrowUp") {
-									event.preventDefault();
+								updateBlock(block.id, {
+									content,
+								});
 
-									setSlashMenu((menu) =>
-										menu
-											? {
-													...menu,
-													activeIndex:
-														(menu.activeIndex - 1 + blockCommands.length) %
-														blockCommands.length,
-												}
-											: menu,
-									);
-									return;
+								if (content === "/" || content.endsWith(" /")) {
+									// Open menu
+									setSlashMenu({
+										blockId: block.id,
+										activeIndex: 0,
+									});
+								} else {
+									// Hide menu
+									setSlashMenu(null);
+								}
+							}}
+							onKeyDown={(event) => {
+								if (slashMenu?.blockId === block.id) {
+									if (event.key === "ArrowDown") {
+										event.preventDefault();
+
+										setSlashMenu((menu) =>
+											menu
+												? {
+														...menu,
+														activeIndex:
+															(menu.activeIndex + 1) % blockCommands.length,
+													}
+												: menu,
+										);
+										return;
+									}
+
+									if (event.key === "ArrowUp") {
+										event.preventDefault();
+
+										setSlashMenu((menu) =>
+											menu
+												? {
+														...menu,
+														activeIndex:
+															(menu.activeIndex - 1 + blockCommands.length) %
+															blockCommands.length,
+													}
+												: menu,
+										);
+										return;
+									}
+
+									if (event.key === "Enter") {
+										event.preventDefault();
+										const item = blockCommands[slashMenu.activeIndex];
+										selectSlashItem(item.type);
+
+										return;
+									}
+
+									if (event.key === "Escape") {
+										event.preventDefault();
+										setSlashMenu(null);
+										return;
+									}
 								}
 
 								if (event.key === "Enter") {
 									event.preventDefault();
-									const item = blockCommands[slashMenu.activeIndex];
-									selectSlashItem(item.type);
 
+									const selection = window.getSelection();
+									const offset = selection?.anchorOffset ?? 0;
+
+									const nextBlockId = splitBlock(block.id, offset);
+									if (nextBlockId === null) return;
+
+									requestAnimationFrame(() => {
+										const nextBlock = blocksRef.current.get(nextBlockId);
+
+										if (!nextBlock) return;
+
+										focusBlock(nextBlock, 0);
+									});
 									return;
 								}
 
-								if (event.key === "Escape") {
+								if (event.key === "Backspace") {
+									// mergeBlockBackward
+									// caret의 위치가 처음인 경우에 merge
+
+									const selection = window.getSelection();
+									const isAtStart =
+										selection?.isCollapsed && selection.anchorOffset === 0;
+									if (!isAtStart) return;
 									event.preventDefault();
-									setSlashMenu(null);
+
+									const isEmpty =
+										(event.currentTarget.textContent ?? "") === "";
+									const target = isEmpty
+										? deleteBlockBackward(block.id)
+										: mergeBlockBackward(block.id);
+
+									if (!target) return;
+
+									requestAnimationFrame(() => {
+										const targetBlock = blocksRef.current.get(target.id);
+										if (!targetBlock) return;
+
+										focusBlock(targetBlock, target.offset);
+									});
+
 									return;
 								}
-							}
 
-							if (event.key === "Enter") {
-								event.preventDefault();
+								if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+									event.preventDefault();
 
-								const selection = window.getSelection();
-								const offset = selection?.anchorOffset ?? 0;
+									const index = blocks.findIndex(
+										(item) => item.id === block.id,
+									);
+									const nextIndex =
+										event.key === "ArrowUp" ? index - 1 : index + 1;
 
-								const nextBlockId = splitBlock(block.id, offset);
-								if (nextBlockId === null) return;
-
-								requestAnimationFrame(() => {
-									const nextBlock = blocksRef.current.get(nextBlockId);
-
+									const nextBlock = blocks[nextIndex];
 									if (!nextBlock) return;
 
-									focusBlock(nextBlock, 0);
-								});
-								return;
-							}
+									const offset = getCaretOffset();
 
-							if (event.key === "Backspace") {
-								// mergeBlockBackward
-								// caret의 위치가 처음인 경우에 merge
-
-								const selection = window.getSelection();
-								const isAtStart =
-									selection?.isCollapsed && selection.anchorOffset === 0;
-								if (!isAtStart) return;
-								event.preventDefault();
-
-								const isEmpty = (event.currentTarget.textContent ?? "") === "";
-								const target = isEmpty
-									? deleteBlockBackward(block.id)
-									: mergeBlockBackward(block.id);
-
-								if (!target) return;
-
-								requestAnimationFrame(() => {
-									const targetBlock = blocksRef.current.get(target.id);
-									if (!targetBlock) return;
-
-									focusBlock(targetBlock, target.offset);
-								});
-
-								return;
-							}
-
-							if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-								event.preventDefault();
-
-								const index = blocks.findIndex((item) => item.id === block.id);
-								const nextIndex =
-									event.key === "ArrowUp" ? index - 1 : index + 1;
-
-								const nextBlock = blocks[nextIndex];
-								if (!nextBlock) return;
-
-								const offset = getCaretOffset();
-
-								requestAnimationFrame(() => {
-									const element = blocksRef.current.get(nextBlock.id);
-									if (!element) return;
-									focusBlock(element, offset);
-								});
-							}
-						}}
-					/>
-				);
-			})}
-			{slashMenu ? (
-				<div className="slash-menu">
-					{blockCommands.map((item, index) => (
-						<button
-							key={item.type}
-							type="button"
-							className={index === slashMenu.activeIndex ? "active" : ""}
-							onMouseDown={(event) => {
-								event.preventDefault();
-								selectSlashItem(item.type);
+									requestAnimationFrame(() => {
+										const element = blocksRef.current.get(nextBlock.id);
+										if (!element) return;
+										focusBlock(element, offset);
+									});
+								}
 							}}
-						>
-							{item.label}
-						</button>
-					))}
-				</div>
-			) : null}
+						/>
+					);
+				})}
+				{slashMenu ? (
+					<div className="mb-slash-menu">
+						{blockCommands.map((item, index) => (
+							<button
+								key={item.type}
+								type="button"
+								className={index === slashMenu.activeIndex ? "active" : ""}
+								onMouseDown={(event) => {
+									event.preventDefault();
+									selectSlashItem(item.type);
+								}}
+							>
+								{item.label}
+							</button>
+						))}
+					</div>
+				) : null}
+			</div>
 		</div>
 	);
 }
