@@ -7,6 +7,8 @@
 	--mb-color-code-bg: #f7f6f3;
 	--mb-font-family: ui-sans-serif, system-ui, sans-serif;
 	--mb-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+	--mb-block-min-height: 24px;
+	--mb-block-gap: 2px;
 	color: var(--mb-color-text, #37352f);
 	background: var(--mb-color-bg, #fff);
 	font-family: var(--mb-font-family);
@@ -23,19 +25,41 @@
 
 .mb-editor .mb-block {
 	margin: 0;
-	min-height: 1.5em;
+	min-height: var(--mb-block-min-height);
 	outline: none;
 	color: var(--mb-color-text);
 	font-family: var(--mb-font-family);
+	line-height: 1.5;
 	white-space: pre-wrap;
 	word-break: break-word;
+}
+
+.mb-editor .mb-block + .mb-block {
+	margin-top: var(--mb-block-gap);
 }
 
 .mb-editor .mb-block[data-block-type="h1"] {
 	font-size: 40px;
 	font-weight: 700;
-	line-height: 1.2;
-	margin-top: 1.4em;
+	line-height: 1.15;
+}
+
+.mb-editor .mb-block[data-block-type="h2"] {
+	font-size: 30px;
+	font-weight: 700;
+	line-height: 1.25;
+}
+
+.mb-editor .mb-block[data-block-type="h3"] {
+	font-size: 24px;
+	font-weight: 700;
+	line-height: 1.3;
+}
+
+.mb-editor .mb-block + .mb-block[data-block-type="h1"],
+.mb-editor .mb-block + .mb-block[data-block-type="h2"],
+.mb-editor .mb-block + .mb-block[data-block-type="h3"] {
+	margin-top: 16px;
 }
 
 .mb-editor .mb-block[data-block-type="blockquote"] {
