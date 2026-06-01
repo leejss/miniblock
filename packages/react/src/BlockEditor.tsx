@@ -1,20 +1,13 @@
 import type { Block, BlockType } from "@miniblock/core";
-import { act, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { blockCommands } from "./commands";
+import { matchTextShortcut } from "./shortcuts";
 import { useBlockEditor } from "./useBlockEditor";
 
 type SlashMenuState = {
 	blockId: string;
 	activeIndex: number;
 };
-
-const slashItems = [
-	{ label: "Text", type: "p" },
-	{ label: "Heading 1", type: "h1" },
-	{ label: "Heading 2", type: "h2" },
-	{ label: "Heading 3", type: "h3" },
-	{ label: "Quote", type: "blockquote" },
-	{ label: "Code", type: "pre" },
-] as const;
 
 export type BlockEditorProps = {
 	initialState: Block[];
@@ -35,15 +28,16 @@ export function BlockEditor({ initialState, onChange }: BlockEditorProps) {
 
 	const selectSlashItem = (type: BlockType) => {
 		if (!slashMenu) return;
-		const target = changeBlockType(slashMenu.blockId, type);
-
+		const element = blocksRef.current.get(slashMenu.blockId);
+		const content = element?.textContent ?? "";
+		const nextContent = content === "/" ? "" : content.replace(/ \/$/, "");
+		const target = changeBlockType(slashMenu.blockId, type, nextContent);
 		setSlashMenu(null);
 		if (!target) return;
-
 		requestAnimationFrame(() => {
-			const element = blocksRef.current.get(target.id);
-			if (!element) return;
-			focusBlock(element, target.offset);
+			const nextElement = blocksRef.current.get(target.id);
+			if (!nextElement) return;
+			focusBlock(nextElement, target.offset);
 		});
 	};
 
@@ -70,6 +64,25 @@ export function BlockEditor({ initialState, onChange }: BlockEditorProps) {
 						suppressContentEditableWarning
 						onInput={(event) => {
 							const content = event.currentTarget.textContent ?? "";
+							// match shortcut
+							const shortcut = matchTextShortcut(content);
+							if (shortcut) {
+								const target = changeBlockType(
+									block.id,
+									shortcut.type,
+									shortcut.nextContent,
+								);
+								setSlashMenu(null);
+								if (!target) return;
+
+								requestAnimationFrame(() => {
+									const element = blocksRef.current.get(block.id);
+									if (!element) return;
+									focusBlock(element, target.offset);
+								});
+								return;
+							}
+
 							updateBlock(block.id, {
 								content,
 							});
@@ -95,7 +108,7 @@ export function BlockEditor({ initialState, onChange }: BlockEditorProps) {
 											? {
 													...menu,
 													activeIndex:
-														(menu.activeIndex + 1) % slashItems.length,
+														(menu.activeIndex + 1) % blockCommands.length,
 												}
 											: menu,
 									);
@@ -110,8 +123,8 @@ export function BlockEditor({ initialState, onChange }: BlockEditorProps) {
 											? {
 													...menu,
 													activeIndex:
-														(menu.activeIndex - 1 + slashItems.length) %
-														slashItems.length,
+														(menu.activeIndex - 1 + blockCommands.length) %
+														blockCommands.length,
 												}
 											: menu,
 									);
@@ -120,7 +133,7 @@ export function BlockEditor({ initialState, onChange }: BlockEditorProps) {
 
 								if (event.key === "Enter") {
 									event.preventDefault();
-									const item = slashItems[slashMenu.activeIndex];
+									const item = blockCommands[slashMenu.activeIndex];
 									selectSlashItem(item.type);
 
 									return;
@@ -203,7 +216,7 @@ export function BlockEditor({ initialState, onChange }: BlockEditorProps) {
 			})}
 			{slashMenu ? (
 				<div className="slash-menu">
-					{slashItems.map((item, index) => (
+					{blockCommands.map((item, index) => (
 						<button
 							key={item.type}
 							type="button"

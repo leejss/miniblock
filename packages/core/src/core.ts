@@ -131,21 +131,21 @@ export class MiniBlockCore {
 		};
 	}
 
-	changeBlockType(id: string, type: BlockType): FocusTarget | null {
+	changeBlockType(
+		id: string,
+		type: BlockType,
+		newContent?: string,
+	): FocusTarget | null {
 		const index = this.blocks.findIndex((block) => block.id === id);
 		if (index === -1) return null;
-
 		const block = this.blocks[index];
-
-		const newContent =
-			block.content === "/" ? "" : block.content.replace(/ \/$/, "");
-
+		const content = newContent ?? block.content;
 		this.blocks = this.blocks.map((block) =>
 			block.id === id
 				? {
 						...block,
 						type,
-						content: newContent,
+						content,
 					}
 				: block,
 		);
@@ -154,7 +154,7 @@ export class MiniBlockCore {
 
 		return {
 			id,
-			offset: newContent.length,
+			offset: content.length,
 		};
 	}
 }
