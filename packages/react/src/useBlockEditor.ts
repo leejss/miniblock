@@ -1,13 +1,16 @@
 import { type Block, MiniBlockCore } from "@miniblock/core";
-import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 export type UseBlockEditorOptions = {
 	initialState: Block[];
 	onChange?: (blocks: Block[]) => void;
 };
 export function useBlockEditor(options: UseBlockEditorOptions) {
-	const editor = useMemo(() => {
-		return new MiniBlockCore(options.initialState);
-	}, [options.initialState]);
+	const editorRef = useRef<MiniBlockCore | null>(null);
+	if (!editorRef.current) {
+		editorRef.current = new MiniBlockCore(options.initialState);
+	}
+
+	const editor = editorRef.current;
 
 	const blocks = useSyncExternalStore(
 		(onStoreChange) => editor.subscribe(() => onStoreChange()),

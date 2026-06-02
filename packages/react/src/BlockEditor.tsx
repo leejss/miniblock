@@ -177,9 +177,6 @@ export function BlockEditor({ initialState, onChange }: BlockEditorProps) {
 								}
 
 								if (event.key === "Backspace") {
-									// mergeBlockBackward
-									// caret의 위치가 처음인 경우에 merge
-
 									const selection = window.getSelection();
 									const isAtStart =
 										selection?.isCollapsed && selection.anchorOffset === 0;
