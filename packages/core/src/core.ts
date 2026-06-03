@@ -6,6 +6,9 @@ export class MiniBlockCore {
 	private blocks: Block[] = [];
 	private listeners = new Set<Listener>();
 
+	private past: Block[][] = [];
+	private future: Block[][] = [];
+
 	constructor(initialBlocks: Block[]) {
 		this.blocks = initialBlocks;
 	}
@@ -58,6 +61,10 @@ export class MiniBlockCore {
 	}
 
 	deleteBlock(id: string) {
+		// Guard
+		if (!this.blocks.some((block) => block.id === id)) return;
+		this.recordHistory();
+
 		this.blocks = this.blocks.filter((block) => block.id !== id);
 		this.emit();
 	}
@@ -65,6 +72,8 @@ export class MiniBlockCore {
 	splitBlock(id: string, offset: number): string | null {
 		const index = this.blocks.findIndex((block) => block.id === id);
 		if (index === -1) return null;
+
+		this.recordHistory();
 
 		const block = this.blocks[index];
 		const before = block.content.slice(0, offset);
@@ -91,6 +100,8 @@ export class MiniBlockCore {
 	mergeBlockBackward(id: string): FocusTarget | null {
 		const index = this.blocks.findIndex((block) => block.id === id);
 		if (index <= 0) return null;
+
+		this.recordHistory();
 
 		const currentBlock = this.blocks[index];
 		const previousBlock = this.blocks[index - 1];
@@ -138,6 +149,9 @@ export class MiniBlockCore {
 	): FocusTarget | null {
 		const index = this.blocks.findIndex((block) => block.id === id);
 		if (index === -1) return null;
+
+		this.recordHistory();
+
 		const block = this.blocks[index];
 		const content = newContent ?? block.content;
 		this.blocks = this.blocks.map((block) =>
@@ -156,5 +170,26 @@ export class MiniBlockCore {
 			id,
 			offset: content.length,
 		};
+	}
+
+	undo() {
+		const previous = this.past.pop();
+		if (!previous) return;
+		this.future.push(this.blocks);
+		this.blocks = previous;
+		this.emit();
+	}
+	redo() {
+		const next = this.future.pop();
+		if (!next) return;
+
+		this.past.push(this.blocks);
+		this.blocks = next;
+		this.emit();
+	}
+
+	private recordHistory() {
+		this.past.push(this.blocks);
+		this.future = [];
 	}
 }
