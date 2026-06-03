@@ -50,6 +50,7 @@ export class MiniBlockCore {
 	insertBlockAfter(id: string, block?: Block) {
 		const index = this.blocks.findIndex((block) => block.id === id);
 		if (index === -1) return;
+		this.recordHistory();
 
 		const nextBlock = block ?? this.createBlock();
 		this.blocks = [
@@ -127,6 +128,8 @@ export class MiniBlockCore {
 	deleteBlockBackward(id: string): FocusTarget | null {
 		const index = this.blocks.findIndex((block) => block.id === id);
 		if (index <= 0) return null;
+
+		this.recordHistory();
 
 		const previousBlock = this.blocks[index - 1];
 		this.blocks = [
