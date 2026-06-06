@@ -1,20 +1,35 @@
-import type { Block, BlockType, FocusTarget } from "./types";
+import type {
+	Block,
+	BlockType,
+	EditorSelection,
+	EditorState,
+	FocusTarget,
+	SelectionPoint,
+} from "./types";
 
-type Listener = (blocks: Block[]) => void;
+type Listener = (state: EditorState) => void;
 
 export class MiniBlockCore {
-	private blocks: Block[] = [];
+	private state: EditorState;
+
 	private listeners = new Set<Listener>();
 
-	private past: Block[][] = [];
-	private future: Block[][] = [];
+	private past: EditorState[] = [];
+	private future: EditorState[] = [];
 
 	constructor(initialBlocks: Block[]) {
-		this.blocks = initialBlocks;
+		this.state = {
+			blocks: initialBlocks,
+			selection: null,
+		};
+	}
+
+	getState() {
+		return this.state;
 	}
 
 	getBlocks() {
-		return this.blocks;
+		return this.state.blocks;
 	}
 
 	subscribe(listener: Listener) {
@@ -24,17 +39,58 @@ export class MiniBlockCore {
 		};
 	}
 
+	setSelection(selection: EditorSelection | null) {
+		this.state = {
+			...this.state,
+			selection: this.normalizeSelection(selection),
+		};
+
+		this.emit();
+	}
+
+	private normalizeSelection(
+		selection: EditorSelection | null,
+	): EditorSelection | null {
+		if (!selection) return null;
+
+		const anchor = this.normalizePoint(selection.anchor);
+		const focus = this.normalizePoint(selection.focus);
+
+		if (!anchor || !focus) return null;
+
+		return {
+			anchor,
+			focus,
+		};
+	}
+
+	private normalizePoint(point: SelectionPoint): SelectionPoint | null {
+		const block = this.state.blocks.find((block) => block.id === point.blockId);
+		if (!block) return null;
+		return {
+			blockId: point.blockId,
+			offset: Math.max(0, Math.min(point.offset, block.content.length)),
+		};
+	}
+
 	updateBlock(id: string, patch: Partial<Block>) {
-		this.blocks = this.blocks.map((block) => {
+		if (!this.state.blocks.some((block) => block.id === id)) return;
+
+		const nextBlocks = this.state.blocks.map((block) => {
 			return block.id === id ? { ...block, ...patch } : block;
 		});
+
+		this.state = {
+			...this.state,
+			blocks: nextBlocks,
+		};
 
 		this.emit();
 	}
 
 	private emit() {
 		for (const listener of this.listeners) {
-			listener(this.blocks);
+			listener(this.state);
 		}
 	}
 
@@ -46,37 +102,25 @@ export class MiniBlockCore {
 		};
 	}
 
-	// 특정 블록 뒤에 새 블록을 넣는다.
-	insertBlockAfter(id: string, block?: Block) {
-		const index = this.blocks.findIndex((block) => block.id === id);
-		if (index === -1) return;
-		this.recordHistory();
-
-		const nextBlock = block ?? this.createBlock();
-		this.blocks = [
-			...this.blocks.slice(0, index + 1),
-			nextBlock,
-			...this.blocks.slice(index + 1),
-		];
-		this.emit();
-	}
-
 	deleteBlock(id: string) {
-		// Guard
-		if (!this.blocks.some((block) => block.id === id)) return;
+		if (!this.state.blocks.some((block) => block.id === id)) return;
 		this.recordHistory();
 
-		this.blocks = this.blocks.filter((block) => block.id !== id);
+		const nextBlocks = this.state.blocks.filter((block) => block.id !== id);
+		this.state = {
+			...this.state,
+			blocks: nextBlocks,
+		};
 		this.emit();
 	}
 
 	splitBlock(id: string, offset: number): string | null {
-		const index = this.blocks.findIndex((block) => block.id === id);
+		const index = this.state.blocks.findIndex((block) => block.id === id);
 		if (index === -1) return null;
 
 		this.recordHistory();
 
-		const block = this.blocks[index];
+		const block = this.state.blocks[index];
 		const before = block.content.slice(0, offset);
 		const after = block.content.slice(offset);
 
@@ -87,25 +131,30 @@ export class MiniBlockCore {
 
 		const newBlock = this.createBlock(after);
 
-		this.blocks = [
-			...this.blocks.slice(0, index),
+		const nextBlocks = [
+			...this.state.blocks.slice(0, index),
 			currentBlock,
 			newBlock,
-			...this.blocks.slice(index + 1),
+			...this.state.blocks.slice(index + 1),
 		];
+
+		this.state = {
+			...this.state,
+			blocks: nextBlocks,
+		};
 
 		this.emit();
 		return newBlock.id;
 	}
 
 	mergeBlockBackward(id: string): FocusTarget | null {
-		const index = this.blocks.findIndex((block) => block.id === id);
+		const index = this.state.blocks.findIndex((block) => block.id === id);
 		if (index <= 0) return null;
 
 		this.recordHistory();
 
-		const currentBlock = this.blocks[index];
-		const previousBlock = this.blocks[index - 1];
+		const currentBlock = this.state.blocks[index];
+		const previousBlock = this.state.blocks[index - 1];
 		const offset = previousBlock.content.length;
 
 		const mergedBlock = {
@@ -113,11 +162,17 @@ export class MiniBlockCore {
 			content: previousBlock.content + currentBlock.content,
 		};
 
-		this.blocks = [
-			...this.blocks.slice(0, index - 1),
+		const nextBlocks = [
+			...this.state.blocks.slice(0, index - 1),
 			mergedBlock,
-			...this.blocks.slice(index + 1),
+			...this.state.blocks.slice(index + 1),
 		];
+
+		this.state = {
+			...this.state,
+			blocks: nextBlocks,
+		};
+
 		this.emit();
 		return {
 			id: previousBlock.id,
@@ -126,16 +181,20 @@ export class MiniBlockCore {
 	}
 
 	deleteBlockBackward(id: string): FocusTarget | null {
-		const index = this.blocks.findIndex((block) => block.id === id);
+		const index = this.state.blocks.findIndex((block) => block.id === id);
 		if (index <= 0) return null;
 
 		this.recordHistory();
 
-		const previousBlock = this.blocks[index - 1];
-		this.blocks = [
-			...this.blocks.slice(0, index),
-			...this.blocks.slice(index + 1),
+		const previousBlock = this.state.blocks[index - 1];
+		const nextBlocks = [
+			...this.state.blocks.slice(0, index),
+			...this.state.blocks.slice(index + 1),
 		];
+		this.state = {
+			...this.state,
+			blocks: nextBlocks,
+		};
 
 		this.emit();
 
@@ -150,14 +209,14 @@ export class MiniBlockCore {
 		type: BlockType,
 		newContent?: string,
 	): FocusTarget | null {
-		const index = this.blocks.findIndex((block) => block.id === id);
+		const index = this.state.blocks.findIndex((block) => block.id === id);
 		if (index === -1) return null;
 
 		this.recordHistory();
 
-		const block = this.blocks[index];
+		const block = this.state.blocks[index];
 		const content = newContent ?? block.content;
-		this.blocks = this.blocks.map((block) =>
+		const nextBlocks = this.state.blocks.map((block) =>
 			block.id === id
 				? {
 						...block,
@@ -166,6 +225,11 @@ export class MiniBlockCore {
 					}
 				: block,
 		);
+
+		this.state = {
+			...this.state,
+			blocks: nextBlocks,
+		};
 
 		this.emit();
 
@@ -178,21 +242,21 @@ export class MiniBlockCore {
 	undo() {
 		const previous = this.past.pop();
 		if (!previous) return;
-		this.future.push(this.blocks);
-		this.blocks = previous;
+		this.future.push(this.state);
+		this.state = previous;
 		this.emit();
 	}
 	redo() {
 		const next = this.future.pop();
 		if (!next) return;
 
-		this.past.push(this.blocks);
-		this.blocks = next;
+		this.past.push(this.state);
+		this.state = next;
 		this.emit();
 	}
 
 	private recordHistory() {
-		this.past.push(this.blocks);
+		this.past.push(this.state);
 		this.future = [];
 	}
 }

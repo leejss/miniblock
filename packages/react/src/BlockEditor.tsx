@@ -13,11 +13,11 @@ type SlashMenuState = {
 };
 
 export type BlockEditorProps = {
-	initialState: Block[];
+	initialBlocks: Block[];
 	onChange?: (blocks: Block[]) => void;
 };
 
-export function BlockEditor({ initialState, onChange }: BlockEditorProps) {
+export function BlockEditor({ initialBlocks, onChange }: BlockEditorProps) {
 	const {
 		blocks,
 		updateBlock,
@@ -25,7 +25,7 @@ export function BlockEditor({ initialState, onChange }: BlockEditorProps) {
 		mergeBlockBackward,
 		deleteBlockBackward,
 		changeBlockType,
-	} = useBlockEditor({ initialState, onChange });
+	} = useBlockEditor({ initialBlocks: initialBlocks, onChange });
 
 	const blocksRef = useRef(new Map<string, HTMLElement>());
 	const [slashMenu, setSlashMenu] = useState<SlashMenuState | null>(null);
