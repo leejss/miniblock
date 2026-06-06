@@ -27,6 +27,7 @@ export function useBlockEditor(options: UseBlockEditorOptions) {
 		state,
 		blocks: state.blocks,
 		selection: state.selection,
+		setSelection: editor.setSelection.bind(editor),
 		updateBlock: editor.updateBlock.bind(editor),
 		deleteBlock: editor.deleteBlock.bind(editor),
 		splitBlock: editor.splitBlock.bind(editor),

@@ -52,12 +52,10 @@ export class MiniBlockCore {
 		selection: EditorSelection | null,
 	): EditorSelection | null {
 		if (!selection) return null;
-
 		const anchor = this.normalizePoint(selection.anchor);
 		const focus = this.normalizePoint(selection.focus);
 
 		if (!anchor || !focus) return null;
-
 		return {
 			anchor,
 			focus,
@@ -118,6 +116,21 @@ export class MiniBlockCore {
 		const index = this.state.blocks.findIndex((block) => block.id === id);
 		if (index === -1) return null;
 
+		this.state = {
+			...this.state,
+			// Collapsed caret
+			selection: {
+				anchor: {
+					blockId: id,
+					offset,
+				},
+				focus: {
+					blockId: id,
+					offset,
+				},
+			},
+		};
+
 		this.recordHistory();
 
 		const block = this.state.blocks[index];
@@ -141,6 +154,10 @@ export class MiniBlockCore {
 		this.state = {
 			...this.state,
 			blocks: nextBlocks,
+			selection: {
+				anchor: { blockId: newBlock.id, offset: 0 },
+				focus: { blockId: newBlock.id, offset: 0 },
+			},
 		};
 
 		this.emit();
