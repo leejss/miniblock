@@ -6,11 +6,6 @@ export type Block = {
 	content: string;
 };
 
-export type FocusTarget = {
-	id: string;
-	offset: number;
-};
-
 export type SelectionPoint = {
 	blockId: string;
 	offset: number;

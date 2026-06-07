@@ -3,7 +3,6 @@ import type {
 	BlockType,
 	EditorSelection,
 	EditorState,
-	FocusTarget,
 	SelectionPoint,
 } from "./types";
 
@@ -100,35 +99,13 @@ export class MiniBlockCore {
 		};
 	}
 
-	deleteBlock(id: string) {
-		if (!this.state.blocks.some((block) => block.id === id)) return;
-		this.recordHistory();
-
-		const nextBlocks = this.state.blocks.filter((block) => block.id !== id);
-		this.state = {
-			...this.state,
-			blocks: nextBlocks,
-		};
-		this.emit();
-	}
-
-	splitBlock(id: string, offset: number): string | null {
+	splitBlock(id: string, offset: number) {
 		const index = this.state.blocks.findIndex((block) => block.id === id);
-		if (index === -1) return null;
+		if (index === -1) return;
 
 		this.state = {
 			...this.state,
-			// Collapsed caret
-			selection: {
-				anchor: {
-					blockId: id,
-					offset,
-				},
-				focus: {
-					blockId: id,
-					offset,
-				},
-			},
+			selection: this.createCollapsedSelection(id, offset),
 		};
 
 		this.recordHistory();
@@ -154,19 +131,15 @@ export class MiniBlockCore {
 		this.state = {
 			...this.state,
 			blocks: nextBlocks,
-			selection: {
-				anchor: { blockId: newBlock.id, offset: 0 },
-				focus: { blockId: newBlock.id, offset: 0 },
-			},
+			selection: this.createCollapsedSelection(newBlock.id, 0),
 		};
 
 		this.emit();
-		return newBlock.id;
 	}
 
-	mergeBlockBackward(id: string): FocusTarget | null {
+	mergeBlockBackward(id: string) {
 		const index = this.state.blocks.findIndex((block) => block.id === id);
-		if (index <= 0) return null;
+		if (index <= 0) return;
 
 		this.recordHistory();
 
@@ -174,7 +147,7 @@ export class MiniBlockCore {
 		const previousBlock = this.state.blocks[index - 1];
 		const offset = previousBlock.content.length;
 
-		const mergedBlock = {
+		const mergedBlock: Block = {
 			...previousBlock,
 			content: previousBlock.content + currentBlock.content,
 		};
@@ -188,22 +161,20 @@ export class MiniBlockCore {
 		this.state = {
 			...this.state,
 			blocks: nextBlocks,
+			selection: this.createCollapsedSelection(previousBlock.id, offset),
 		};
 
 		this.emit();
-		return {
-			id: previousBlock.id,
-			offset,
-		};
 	}
 
-	deleteBlockBackward(id: string): FocusTarget | null {
+	deleteBlockBackward(id: string): void {
 		const index = this.state.blocks.findIndex((block) => block.id === id);
-		if (index <= 0) return null;
+		if (index <= 0) return;
 
 		this.recordHistory();
 
 		const previousBlock = this.state.blocks[index - 1];
+		const offset = previousBlock.content.length;
 		const nextBlocks = [
 			...this.state.blocks.slice(0, index),
 			...this.state.blocks.slice(index + 1),
@@ -211,23 +182,15 @@ export class MiniBlockCore {
 		this.state = {
 			...this.state,
 			blocks: nextBlocks,
+			selection: this.createCollapsedSelection(previousBlock.id, offset),
 		};
 
 		this.emit();
-
-		return {
-			id: previousBlock.id,
-			offset: previousBlock.content.length,
-		};
 	}
 
-	changeBlockType(
-		id: string,
-		type: BlockType,
-		newContent?: string,
-	): FocusTarget | null {
+	changeBlockType(id: string, type: BlockType, newContent?: string): void {
 		const index = this.state.blocks.findIndex((block) => block.id === id);
-		if (index === -1) return null;
+		if (index === -1) return;
 
 		this.recordHistory();
 
@@ -246,14 +209,10 @@ export class MiniBlockCore {
 		this.state = {
 			...this.state,
 			blocks: nextBlocks,
+			selection: this.createCollapsedSelection(id, content.length),
 		};
 
 		this.emit();
-
-		return {
-			id,
-			offset: content.length,
-		};
 	}
 
 	undo() {
@@ -275,5 +234,15 @@ export class MiniBlockCore {
 	private recordHistory() {
 		this.past.push(this.state);
 		this.future = [];
+	}
+
+	private createCollapsedSelection(
+		blockId: string,
+		offset: number,
+	): EditorSelection {
+		return {
+			anchor: { blockId, offset },
+			focus: { blockId, offset },
+		};
 	}
 }

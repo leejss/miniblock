@@ -1,10 +1,5 @@
 import "./styles.css";
-import type {
-	Block,
-	BlockType,
-	EditorSelection,
-	SelectionPoint,
-} from "@miniblock/core";
+import type { Block, BlockType, EditorSelection } from "@miniblock/core";
 import { useLayoutEffect, useRef, useState } from "react";
 import { blockCommands } from "./commands";
 import { matchTextShortcut } from "./shortcuts";
@@ -42,21 +37,15 @@ export function BlockEditor({ initialBlocks, onChange }: BlockEditorProps) {
 		const element = blocksRef.current.get(slashMenu.blockId);
 		const content = element?.textContent ?? "";
 		const nextContent = content === "/" ? "" : content.replace(/ \/$/, "");
-		const target = changeBlockType(slashMenu.blockId, type, nextContent);
+
+		changeBlockType(slashMenu.blockId, type, nextContent);
 		setSlashMenu(null);
-		if (!target) return;
-		requestAnimationFrame(() => {
-			const nextElement = blocksRef.current.get(target.id);
-			if (!nextElement) return;
-			focusBlock(nextElement, target.offset);
-		});
 	};
 
 	const syncSelectionFromDom = () => {
 		setSelection(readSelectionFromDom(blocksRef.current));
 	};
 
-	console.log("selection", selection);
 	useLayoutEffect(() => {
 		applySelectionToDom(blocksRef.current, selection);
 	}, [selection]);
@@ -89,20 +78,14 @@ export function BlockEditor({ initialBlocks, onChange }: BlockEditorProps) {
 								const content = event.currentTarget.textContent ?? "";
 								// match shortcut
 								const shortcut = matchTextShortcut(content);
+
 								if (shortcut) {
-									const target = changeBlockType(
+									changeBlockType(
 										block.id,
 										shortcut.type,
 										shortcut.nextContent,
 									);
 									setSlashMenu(null);
-									if (!target) return;
-
-									requestAnimationFrame(() => {
-										const element = blocksRef.current.get(block.id);
-										if (!element) return;
-										focusBlock(element, target.offset);
-									});
 									return;
 								}
 
@@ -181,16 +164,7 @@ export function BlockEditor({ initialBlocks, onChange }: BlockEditorProps) {
 									const selection = window.getSelection();
 									const offset = selection?.anchorOffset ?? 0;
 
-									const nextBlockId = splitBlock(block.id, offset);
-									if (nextBlockId === null) return;
-
-									requestAnimationFrame(() => {
-										const nextBlock = blocksRef.current.get(nextBlockId);
-
-										if (!nextBlock) return;
-
-										focusBlock(nextBlock, 0);
-									});
+									splitBlock(block.id, offset);
 									return;
 								}
 
@@ -203,18 +177,10 @@ export function BlockEditor({ initialBlocks, onChange }: BlockEditorProps) {
 
 									const isEmpty =
 										(event.currentTarget.textContent ?? "") === "";
-									const target = isEmpty
+
+									isEmpty
 										? deleteBlockBackward(block.id)
 										: mergeBlockBackward(block.id);
-
-									if (!target) return;
-
-									requestAnimationFrame(() => {
-										const targetBlock = blocksRef.current.get(target.id);
-										if (!targetBlock) return;
-
-										focusBlock(targetBlock, target.offset);
-									});
 
 									return;
 								}
@@ -225,18 +191,18 @@ export function BlockEditor({ initialBlocks, onChange }: BlockEditorProps) {
 									const index = blocks.findIndex(
 										(item) => item.id === block.id,
 									);
+
+									if (index === -1) return;
+
 									const nextIndex =
 										event.key === "ArrowUp" ? index - 1 : index + 1;
-
 									const nextBlock = blocks[nextIndex];
 									if (!nextBlock) return;
 
 									const offset = getCaretOffset();
-
-									requestAnimationFrame(() => {
-										const element = blocksRef.current.get(nextBlock.id);
-										if (!element) return;
-										focusBlock(element, offset);
+									setSelection({
+										anchor: { blockId: nextBlock.id, offset },
+										focus: { blockId: nextBlock.id, offset },
 									});
 								}
 							}}
@@ -266,30 +232,6 @@ export function BlockEditor({ initialBlocks, onChange }: BlockEditorProps) {
 			</div>
 		</div>
 	);
-}
-
-function focusBlock(element: HTMLElement, offset: number) {
-	element.focus();
-
-	//? Check node type ?
-	let textNode = element.firstChild;
-
-	if (!textNode) {
-		textNode = document.createTextNode("");
-		element.appendChild(textNode);
-	}
-
-	if (!(textNode instanceof Text)) return;
-
-	const range = document.createRange();
-	const targetOffset = Math.min(offset, textNode.textContent?.length ?? 0);
-
-	range.setStart(textNode, targetOffset);
-	range.collapse(true);
-
-	const selection = document.getSelection();
-	selection?.removeAllRanges();
-	selection?.addRange(range);
 }
 
 function getCaretOffset() {
@@ -352,28 +294,27 @@ function applySelectionToDom(
 	if (!anchorBlockElement || !focusBlockElement) return;
 
 	// GET TextNode
-	const anchorText = ensureTextNode(anchorBlockElement);
-	const focusText = ensureTextNode(focusBlockElement);
+	const anchorTextNode = ensureTextNode(anchorBlockElement);
+	const focusTextNode = ensureTextNode(focusBlockElement);
+	if (!anchorTextNode || !focusTextNode) return;
 
-	if (!anchorText || !focusText) return;
-
-	const range = document.createRange();
-
-	range.setStart(
-		anchorText,
-		Math.min(
-			editorSelection.anchor.offset,
-			anchorText.textContent?.length ?? 0,
-		),
+	const anchorOffset = Math.min(
+		editorSelection.anchor.offset,
+		anchorTextNode.textContent?.length ?? 0,
 	);
-	range.setEnd(
-		focusText,
-		Math.min(editorSelection.focus.offset, focusText.textContent.length ?? 0),
+	const focusOffset = Math.min(
+		editorSelection.focus.offset,
+		focusTextNode.textContent?.length ?? 0,
 	);
 
 	const domSelection = document.getSelection();
 	domSelection?.removeAllRanges();
-	domSelection?.addRange(range);
+	domSelection?.setBaseAndExtent(
+		anchorTextNode,
+		anchorOffset,
+		focusTextNode,
+		focusOffset,
+	);
 }
 
 function ensureTextNode(element: HTMLElement): Text | null {
