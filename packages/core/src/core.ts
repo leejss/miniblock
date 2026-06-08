@@ -1,26 +1,29 @@
-import type {
-	Block,
-	BlockType,
-	EditorSelection,
-	EditorState,
-	SelectionPoint,
-} from "./types";
+import { type CreateId, createBlock } from "./blocks";
+import { normalizeSelection } from "./selection";
+import { splitBlockState } from "./transform";
+import type { Block, BlockType, EditorSelection, EditorState } from "./types";
 
 type Listener = (state: EditorState) => void;
 
+export type MiniBlockCoreOptions = {
+	createId?: () => string;
+};
+
 export class MiniBlockCore {
 	private state: EditorState;
-
 	private listeners = new Set<Listener>();
-
 	private past: EditorState[] = [];
 	private future: EditorState[] = [];
 
-	constructor(initialBlocks: Block[]) {
+	private createId: CreateId;
+
+	constructor(initialBlocks: Block[], options: MiniBlockCoreOptions = {}) {
 		this.state = {
 			blocks: initialBlocks,
 			selection: null,
 		};
+
+		this.createId = options.createId ? options.createId : crypto.randomUUID;
 	}
 
 	getState() {
@@ -41,33 +44,10 @@ export class MiniBlockCore {
 	setSelection(selection: EditorSelection | null) {
 		this.state = {
 			...this.state,
-			selection: this.normalizeSelection(selection),
+			selection: normalizeSelection(this.state.blocks, selection),
 		};
 
 		this.emit();
-	}
-
-	private normalizeSelection(
-		selection: EditorSelection | null,
-	): EditorSelection | null {
-		if (!selection) return null;
-		const anchor = this.normalizePoint(selection.anchor);
-		const focus = this.normalizePoint(selection.focus);
-
-		if (!anchor || !focus) return null;
-		return {
-			anchor,
-			focus,
-		};
-	}
-
-	private normalizePoint(point: SelectionPoint): SelectionPoint | null {
-		const block = this.state.blocks.find((block) => block.id === point.blockId);
-		if (!block) return null;
-		return {
-			blockId: point.blockId,
-			offset: Math.max(0, Math.min(point.offset, block.content.length)),
-		};
 	}
 
 	updateBlock(id: string, patch: Partial<Block>) {
@@ -91,49 +71,17 @@ export class MiniBlockCore {
 		}
 	}
 
-	private createBlock(content = "", type: BlockType = "p") {
-		return {
-			id: crypto.randomUUID(),
-			type,
-			content,
-		};
-	}
-
 	splitBlock(id: string, offset: number) {
-		const index = this.state.blocks.findIndex((block) => block.id === id);
-		if (index === -1) return;
+		const nextState = splitBlockState(this.state, {
+			blockId: id,
+			offset,
+			createId: this.createId,
+		});
 
-		this.state = {
-			...this.state,
-			selection: this.createCollapsedSelection(id, offset),
-		};
+		if (this.state === nextState) return;
 
 		this.recordHistory();
-
-		const block = this.state.blocks[index];
-		const before = block.content.slice(0, offset);
-		const after = block.content.slice(offset);
-
-		const currentBlock = {
-			...block,
-			content: before,
-		};
-
-		const newBlock = this.createBlock(after);
-
-		const nextBlocks = [
-			...this.state.blocks.slice(0, index),
-			currentBlock,
-			newBlock,
-			...this.state.blocks.slice(index + 1),
-		];
-
-		this.state = {
-			...this.state,
-			blocks: nextBlocks,
-			selection: this.createCollapsedSelection(newBlock.id, 0),
-		};
-
+		this.state = nextState;
 		this.emit();
 	}
 
