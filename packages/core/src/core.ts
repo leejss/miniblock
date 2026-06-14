@@ -1,6 +1,6 @@
-import { type CreateId, createBlock } from "./blocks";
+import type { CreateId } from "./blocks";
 import { normalizeSelection } from "./selection";
-import { splitBlockState } from "./transform";
+import { mergetBlockBackwardState, splitBlockState } from "./transform";
 import type { Block, BlockType, EditorSelection, EditorState } from "./types";
 
 type Listener = (state: EditorState) => void;
@@ -72,10 +72,12 @@ export class MiniBlockCore {
 	}
 
 	splitBlock(id: string, offset: number) {
+		// newState = currentState + input
+		const newBlockId = this.createId();
 		const nextState = splitBlockState(this.state, {
 			blockId: id,
 			offset,
-			createId: this.createId,
+			newBlockId,
 		});
 
 		if (this.state === nextState) return;
@@ -85,33 +87,14 @@ export class MiniBlockCore {
 		this.emit();
 	}
 
-	mergeBlockBackward(id: string) {
-		const index = this.state.blocks.findIndex((block) => block.id === id);
-		if (index <= 0) return;
+	mergeBlockBackward(blockId: string) {
+		const newState = mergetBlockBackwardState(this.state, {
+			blockId,
+		});
 
+		if (this.state === newState) return;
 		this.recordHistory();
-
-		const currentBlock = this.state.blocks[index];
-		const previousBlock = this.state.blocks[index - 1];
-		const offset = previousBlock.content.length;
-
-		const mergedBlock: Block = {
-			...previousBlock,
-			content: previousBlock.content + currentBlock.content,
-		};
-
-		const nextBlocks = [
-			...this.state.blocks.slice(0, index - 1),
-			mergedBlock,
-			...this.state.blocks.slice(index + 1),
-		];
-
-		this.state = {
-			...this.state,
-			blocks: nextBlocks,
-			selection: this.createCollapsedSelection(previousBlock.id, offset),
-		};
-
+		this.state = newState;
 		this.emit();
 	}
 

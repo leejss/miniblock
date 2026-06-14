@@ -2,12 +2,14 @@ import { createBlock } from "./blocks";
 import { createCollapsedSelection } from "./selection";
 import type { Block, EditorState } from "./types";
 
+// State transition
+
 export function splitBlockState(
 	state: EditorState,
 	input: {
 		blockId: string;
 		offset: number;
-		createId: () => string;
+		newBlockId: string;
 	},
 ): EditorState {
 	const index = state.blocks.findIndex((item) => item.id === input.blockId);
@@ -24,7 +26,10 @@ export function splitBlockState(
 		content: before,
 	};
 
-	const newBlock = createBlock(input.createId, after);
+	const newBlock = createBlock({
+		id: input.newBlockId,
+		content: after,
+	});
 
 	const blocks = [
 		...state.blocks.slice(0, index),
@@ -36,6 +41,35 @@ export function splitBlockState(
 	return {
 		...state,
 		blocks,
-		selection: createCollapsedSelection(newBlock.id, 0),
+		selection: createCollapsedSelection(newBlock.id),
+	};
+}
+
+export function mergetBlockBackwardState(
+	state: EditorState,
+	input: { blockId: string },
+): EditorState {
+	const index = state.blocks.findIndex((block) => block.id === input.blockId);
+	if (index <= 0) return state;
+
+	const currentBlock = state.blocks[index];
+	const previousBlock = state.blocks[index - 1];
+	const offset = previousBlock.content.length;
+
+	const mergedBlock: Block = {
+		...previousBlock,
+		content: previousBlock.content + currentBlock.content,
+	};
+
+	const nextBlocks = [
+		...state.blocks.slice(0, index - 1),
+		mergedBlock,
+		...state.blocks.slice(index + 1),
+	];
+
+	return {
+		...state,
+		blocks: nextBlocks,
+		selection: createCollapsedSelection(previousBlock.id, offset),
 	};
 }

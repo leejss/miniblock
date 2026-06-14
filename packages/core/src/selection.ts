@@ -31,7 +31,7 @@ export function normalizeSelection(
 
 export function createCollapsedSelection(
 	blockId: string,
-	offset: number,
+	offset: number = 0,
 ): EditorSelection {
 	return {
 		anchor: { blockId, offset },
