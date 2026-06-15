@@ -19,7 +19,13 @@ export default defineConfig({
 			fileName: (format) => `miniblock-react.${format === "es" ? "js" : "cjs"}`,
 		},
 		rollupOptions: {
-			external: ["react", "react-dom", "@miniblock/core"],
+			external: [
+				"react",
+				"react-dom",
+				"react/jsx-runtime",
+				"react/jsx-dev-runtime",
+				"@miniblock/core",
+			],
 		},
 	},
 });

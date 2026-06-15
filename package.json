@@ -8,10 +8,10 @@
 		"dev:react": "pnpm --filter @miniblock/react dev",
 		"dev:demo": "pnpm --filter demo dev",
 		"build:all": "pnpm --filter @miniblock/core build && pnpm --filter @miniblock/react build && pnpm --filter demo build",
-		"check" : "biome check .",
-		"check:fix" : "biome check --write .",
-		"lint" : "biome lint .",
-		"format" : "biome format --write ."
+		"check": "biome check .",
+		"check:fix": "biome check --write .",
+		"lint": "biome lint .",
+		"format": "biome format --write ."
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.5.0",

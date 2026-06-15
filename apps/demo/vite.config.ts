@@ -7,7 +7,10 @@ export default defineConfig({
 	resolve: {
 		alias: {
 			"@miniblock/core": resolve(__dirname, "../../packages/core/src/index.ts"),
-			"@miniblock/react": resolve(__dirname, "../../packages/react/src/index.ts"),
+			"@miniblock/react": resolve(
+				__dirname,
+				"../../packages/react/src/index.ts",
+			),
 		},
 	},
 	server: {
