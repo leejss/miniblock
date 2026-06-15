@@ -1,8 +1,8 @@
-import "./styles.css";
-import type { Block, BlockType, EditorSelection } from "@miniblock/core";
+import type { BlockType, EditorSelection, EditorState } from "@miniblock/core";
 import { useLayoutEffect, useRef, useState } from "react";
 import { blockCommands } from "./commands";
 import { matchTextShortcut } from "./shortcuts";
+import "./styles.css";
 import { useBlockEditor } from "./useBlockEditor";
 
 type SlashMenuState = {
@@ -13,11 +13,11 @@ type SlashMenuState = {
 };
 
 export type BlockEditorProps = {
-	initialBlocks: Block[];
-	onChange?: (blocks: Block[]) => void;
+	initialState: EditorState;
+	onChange?: (state: EditorState) => void;
 };
 
-export function BlockEditor({ initialBlocks, onChange }: BlockEditorProps) {
+export function BlockEditor({ initialState, onChange }: BlockEditorProps) {
 	const {
 		blocks,
 		selection,
@@ -27,7 +27,7 @@ export function BlockEditor({ initialBlocks, onChange }: BlockEditorProps) {
 		deleteBlockBackward,
 		changeBlockType,
 		setSelection,
-	} = useBlockEditor({ initialBlocks: initialBlocks, onChange });
+	} = useBlockEditor({ initialState, onChange });
 
 	const blocksRef = useRef(new Map<string, HTMLElement>());
 	const [slashMenu, setSlashMenu] = useState<SlashMenuState | null>(null);
