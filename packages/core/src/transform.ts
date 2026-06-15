@@ -2,8 +2,6 @@ import { createBlock } from "./blocks";
 import { createCollapsedSelection } from "./selection";
 import type { Block, BlockType, EditorState } from "./types";
 
-// State transition
-
 export function splitBlockState(
 	state: EditorState,
 	input: {

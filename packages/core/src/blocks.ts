@@ -1,7 +1,5 @@
 import type { BlockType } from "./types";
 
-export type CreateId = () => string;
-
 export type CreateBlockInput = {
 	id: string;
 	content?: string;

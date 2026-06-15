@@ -1,5 +1,6 @@
-import type { CreateId } from "./blocks";
+import { createBlockId } from "./id";
 import { normalizeSelection } from "./selection";
+import { createEmptyState, normalizeState } from "./state";
 import {
 	changeBlockTypeState,
 	deleteBlockBackwardState,
@@ -10,25 +11,16 @@ import type { Block, BlockType, EditorSelection, EditorState } from "./types";
 
 type Listener = (state: EditorState) => void;
 
-export type MiniBlockCoreOptions = {
-	createId?: () => string;
-};
-
 export class MiniBlockCore {
 	private state: EditorState;
 	private listeners = new Set<Listener>();
 	private past: EditorState[] = [];
 	private future: EditorState[] = [];
 
-	private createId: CreateId;
-
-	constructor(initialBlocks: Block[], options: MiniBlockCoreOptions = {}) {
-		this.state = {
-			blocks: initialBlocks,
-			selection: null,
-		};
-
-		this.createId = options.createId ? options.createId : crypto.randomUUID;
+	constructor(initialState?: EditorState) {
+		this.state = initialState
+			? normalizeState(initialState)
+			: createEmptyState();
 	}
 
 	getState() {
@@ -78,7 +70,7 @@ export class MiniBlockCore {
 
 	splitBlock(id: string, offset: number) {
 		// newState = currentState + input
-		const newBlockId = this.createId();
+		const newBlockId = createBlockId();
 		const nextState = splitBlockState(this.state, {
 			blockId: id,
 			offset,
