@@ -1,6 +1,11 @@
 import type { CreateId } from "./blocks";
 import { normalizeSelection } from "./selection";
-import { mergetBlockBackwardState, splitBlockState } from "./transform";
+import {
+	changeBlockTypeState,
+	deleteBlockBackwardState,
+	mergeBlockBackwardState,
+	splitBlockState,
+} from "./transform";
 import type { Block, BlockType, EditorSelection, EditorState } from "./types";
 
 type Listener = (state: EditorState) => void;
@@ -88,7 +93,7 @@ export class MiniBlockCore {
 	}
 
 	mergeBlockBackward(blockId: string) {
-		const newState = mergetBlockBackwardState(this.state, {
+		const newState = mergeBlockBackwardState(this.state, {
 			blockId,
 		});
 
@@ -98,51 +103,27 @@ export class MiniBlockCore {
 		this.emit();
 	}
 
-	deleteBlockBackward(id: string): void {
-		const index = this.state.blocks.findIndex((block) => block.id === id);
-		if (index <= 0) return;
+	deleteBlockBackward(blockId: string): void {
+		const newState = deleteBlockBackwardState(this.state, {
+			blockId,
+		});
 
+		if (this.state === newState) return;
 		this.recordHistory();
-
-		const previousBlock = this.state.blocks[index - 1];
-		const offset = previousBlock.content.length;
-		const nextBlocks = [
-			...this.state.blocks.slice(0, index),
-			...this.state.blocks.slice(index + 1),
-		];
-		this.state = {
-			...this.state,
-			blocks: nextBlocks,
-			selection: this.createCollapsedSelection(previousBlock.id, offset),
-		};
-
+		this.state = newState;
 		this.emit();
 	}
 
 	changeBlockType(id: string, type: BlockType, newContent?: string): void {
-		const index = this.state.blocks.findIndex((block) => block.id === id);
-		if (index === -1) return;
+		const newState = changeBlockTypeState(this.state, {
+			blockId: id,
+			type,
+			newContent,
+		});
 
+		if (this.state === newState) return;
 		this.recordHistory();
-
-		const block = this.state.blocks[index];
-		const content = newContent ?? block.content;
-		const nextBlocks = this.state.blocks.map((block) =>
-			block.id === id
-				? {
-						...block,
-						type,
-						content,
-					}
-				: block,
-		);
-
-		this.state = {
-			...this.state,
-			blocks: nextBlocks,
-			selection: this.createCollapsedSelection(id, content.length),
-		};
-
+		this.state = newState;
 		this.emit();
 	}
 
@@ -165,15 +146,5 @@ export class MiniBlockCore {
 	private recordHistory() {
 		this.past.push(this.state);
 		this.future = [];
-	}
-
-	private createCollapsedSelection(
-		blockId: string,
-		offset: number,
-	): EditorSelection {
-		return {
-			anchor: { blockId, offset },
-			focus: { blockId, offset },
-		};
 	}
 }
