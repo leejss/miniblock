@@ -23,6 +23,11 @@ export class MiniBlockCore {
 			: createEmptyState();
 	}
 
+	setState(nextState: EditorState, options?: { emit: boolean }) {
+		this.state = normalizeState(nextState);
+		if (options?.emit) this.emit();
+	}
+
 	getState() {
 		return this.state;
 	}

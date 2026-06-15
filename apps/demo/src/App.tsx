@@ -30,7 +30,7 @@ export function App() {
 	return (
 		<main className="demo-shell">
 			<section className="editor-surface" aria-label="miniblock editor demo">
-				<BlockEditor initialState={initialState} onChange={setState} />
+				<BlockEditor value={state} onChange={setState} />
 			</section>
 			<aside className="state-panel" aria-label="editor state">
 				<pre>{JSON.stringify(state, null, 2)}</pre>

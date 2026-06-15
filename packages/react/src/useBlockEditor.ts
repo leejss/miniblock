@@ -1,26 +1,46 @@
 import { type EditorState, MiniBlockCore } from "@miniblock/core";
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import {
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useSyncExternalStore,
+} from "react";
+
 export type UseBlockEditorOptions = {
-	initialState: EditorState;
+	value?: EditorState;
+	defaultValue?: EditorState;
 	onChange?: (state: EditorState) => void;
 };
+
 export function useBlockEditor(options: UseBlockEditorOptions) {
+	const isControlled = options.value !== undefined;
 	const editorRef = useRef<MiniBlockCore | null>(null);
 	if (!editorRef.current) {
-		editorRef.current = new MiniBlockCore(options.initialState);
+		editorRef.current = new MiniBlockCore(
+			options.value ?? options.defaultValue,
+		);
 	}
 
 	const editor = editorRef.current;
 
-	const state = useSyncExternalStore(
+	const storedState = useSyncExternalStore(
 		(onStoreChange) => editor.subscribe(() => onStoreChange()),
 		() => editor.getState(),
 		() => editor.getState(),
 	);
 
+	const state = isControlled ? options.value! : storedState;
+
+	useLayoutEffect(() => {
+		if (!isControlled || !options.value) return;
+		editor.setState(options.value, { emit: false });
+	}, [isControlled, options.value, editor]);
+
 	useEffect(() => {
-		options.onChange?.(state);
-	}, [state, options.onChange]);
+		return editor.subscribe((nextState) => {
+			options.onChange?.(nextState);
+		});
+	}, [options.onChange, editor]);
 
 	return {
 		editor,

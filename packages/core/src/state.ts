@@ -53,3 +53,16 @@ function normalizeBlocks(value: unknown): Block[] {
 		};
 	});
 }
+
+export function toJSON(value: EditorState): EditorState {
+	return normalizeState(value);
+}
+export function fromJSON(value: unknown): EditorState {
+	return normalizeState(value);
+}
+
+export function toPlainText(value: EditorState): string {
+	return normalizeState(value)
+		.blocks.map((block) => block.content)
+		.join("\n");
+}
