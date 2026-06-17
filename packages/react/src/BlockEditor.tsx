@@ -1,5 +1,5 @@
 import type { BlockType, EditorSelection, EditorState } from "@miniblock/core";
-import { useLayoutEffect, useRef, useState } from "react";
+import { type CSSProperties, useLayoutEffect, useRef, useState } from "react";
 import { blockCommands } from "./commands";
 import { matchTextShortcut } from "./shortcuts";
 import "./styles.css";
@@ -16,12 +16,22 @@ export type BlockEditorProps = {
 	value?: EditorState;
 	defaultValue?: EditorState;
 	onChange?: (state: EditorState) => void;
+  readOnly?: string;
+  autoFocus?: string;
+  placeholder?: string
+  className?: string;
+  style?: CSSProperties
 };
 
 export function BlockEditor({
 	onChange,
 	defaultValue,
 	value,
+  autoFocus,
+  className,
+  placeholder,
+  readOnly,
+	style
 }: BlockEditorProps) {
 	const {
 		blocks,
@@ -55,14 +65,16 @@ export function BlockEditor({
 		applySelectionToDom(blocksRef.current, selection);
 	}, [selection]);
 	return (
-		<div className="mb-editor">
+		<div className={ [ "mb-editor", className ].filter(Boolean).join(" ") } style={style}>
 			<div className="mb-editor__page">
 				{blocks.map((block) => {
 					const Block = block.type as BlockType;
+					const showPlaceholder = Boolean					(placeholder) && blocks.length === 1 && block.content.length === 0
 					return (
 						<Block
 							className="mb-block"
 							data-block-type={block.type}
+              data-placeholder={ placeholder}
 							onMouseUp={syncSelectionFromDom}
 							onKeyUp={syncSelectionFromDom}
 							ref={(el: HTMLElement | null) => {
@@ -77,9 +89,10 @@ export function BlockEditor({
 								}
 							}}
 							key={block.id}
-							contentEditable
+							contentEditable={!readOnly}
 							suppressContentEditableWarning
 							onInput={(event) => {
+							if (readOnly) return
 								const content = event.currentTarget.textContent ?? "";
 								// match shortcut
 								const shortcut = matchTextShortcut(content);
@@ -116,6 +129,7 @@ export function BlockEditor({
 								syncSelectionFromDom();
 							}}
 							onKeyDown={(event) => {
+							if (readOnly) return
 								if (slashMenu?.blockId === block.id) {
 									if (event.key === "ArrowDown") {
 										event.preventDefault();

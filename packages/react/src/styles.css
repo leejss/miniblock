@@ -100,3 +100,10 @@
 .mb-editor .mb-slash-menu button:hover {
 	background: var(--mb-color-hover);
 }
+
+
+.mb-block[data-placeholder]::before {
+  content: attr(data-placeholder);
+  color: #9ca3af;
+  pointer-events: none;
+}
