@@ -45,6 +45,7 @@ export function BlockEditor({
 	} = useBlockEditor({ onChange, defaultValue, value });
 
 	const blocksRef = useRef(new Map<string, HTMLElement>());
+	const isComposingRef = useRef(false);
 	const [slashMenu, setSlashMenu] = useState<SlashMenuState | null>(null);
 
 	const selectSlashItem = (type: BlockType) => {
@@ -90,15 +91,59 @@ export function BlockEditor({
 					return (
 						<Block
 							className="mb-block"
+							onCompositionStart={() => {
+								isComposingRef.current = true;
+							}}
+							onCompositionEnd={(event) => {
+								isComposingRef.current = false;
+								if (readOnly) return;
+								const content = event.currentTarget.textContent ?? "";
+								const shortcut = matchTextShortcut(content);
+
+								if (shortcut) {
+									changeBlockType(
+										block.id,
+										shortcut.type,
+										shortcut.nextContent,
+									);
+									setSlashMenu(null);
+									return;
+								}
+
+								updateBlock(block.id, {
+									content,
+								});
+
+								if (content === "/" || content.endsWith(" /")) {
+									const { offsetHeight, offsetLeft, offsetTop } =
+										event.currentTarget;
+
+									setSlashMenu({
+										blockId: block.id,
+										activeIndex: 0,
+										top: offsetTop + offsetHeight + 4,
+										left: offsetLeft,
+									});
+								} else {
+									setSlashMenu(null);
+								}
+								syncSelectionFromDom();
+							}}
 							data-block-type={block.type}
 							data-placeholder={showPlaceholder ? placeholder : undefined}
 							onMouseUp={syncSelectionFromDom}
-							onKeyUp={syncSelectionFromDom}
+							onKeyUp={(e) => {
+								if (isComposingRef.current || e.nativeEvent.isComposing) return;
+								syncSelectionFromDom();
+							}}
 							ref={(el: HTMLElement | null) => {
 								if (el) {
 									blocksRef.current.set(block.id, el);
 
-									if (el.textContent !== block.content) {
+									if (
+										!isComposingRef.current &&
+										el.textContent !== block.content
+									) {
 										el.textContent = block.content;
 									}
 								} else {
@@ -110,6 +155,8 @@ export function BlockEditor({
 							suppressContentEditableWarning
 							onInput={(event) => {
 								if (readOnly) return;
+								// if (isComposingRef.current || event.nativeEvent.isComposing)
+								// 	return;
 								const content = event.currentTarget.textContent ?? "";
 								// match shortcut
 								const shortcut = matchTextShortcut(content);
@@ -147,6 +194,8 @@ export function BlockEditor({
 							}}
 							onKeyDown={(event) => {
 								if (readOnly) return;
+								if (isComposingRef.current || event.nativeEvent.isComposing)
+									return;
 								if (slashMenu?.blockId === block.id) {
 									if (event.key === "ArrowDown") {
 										event.preventDefault();
