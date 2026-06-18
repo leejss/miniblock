@@ -16,22 +16,22 @@ export type BlockEditorProps = {
 	value?: EditorState;
 	defaultValue?: EditorState;
 	onChange?: (state: EditorState) => void;
-  readOnly?: string;
-  autoFocus?: string;
-  placeholder?: string
-  className?: string;
-  style?: CSSProperties
+	readOnly?: string;
+	autoFocus?: boolean;
+	placeholder?: string;
+	className?: string;
+	style?: CSSProperties;
 };
 
 export function BlockEditor({
 	onChange,
 	defaultValue,
 	value,
-  autoFocus,
-  className,
-  placeholder,
-  readOnly,
-	style
+	autoFocus = true,
+	className,
+	placeholder,
+	readOnly,
+	style,
 }: BlockEditorProps) {
 	const {
 		blocks,
@@ -64,17 +64,34 @@ export function BlockEditor({
 	useLayoutEffect(() => {
 		applySelectionToDom(blocksRef.current, selection);
 	}, [selection]);
+
+	const firstBlockId = blocks[0]?.id;
+	useLayoutEffect(() => {
+		if (!autoFocus || !firstBlockId || selection || readOnly) return;
+
+		setSelection({
+			anchor: { blockId: firstBlockId, offset: 0 },
+			focus: { blockId: firstBlockId, offset: 0 },
+		});
+	}, [autoFocus, firstBlockId, selection, readOnly, setSelection]);
+
 	return (
-		<div className={ [ "mb-editor", className ].filter(Boolean).join(" ") } style={style}>
+		<div
+			className={["mb-editor", className].filter(Boolean).join(" ")}
+			style={style}
+		>
 			<div className="mb-editor__page">
 				{blocks.map((block) => {
 					const Block = block.type as BlockType;
-					const showPlaceholder = Boolean					(placeholder) && blocks.length === 1 && block.content.length === 0
+					const showPlaceholder =
+						Boolean(placeholder) &&
+						blocks.length === 1 &&
+						block.content.length === 0;
 					return (
 						<Block
 							className="mb-block"
 							data-block-type={block.type}
-              data-placeholder={ placeholder}
+							data-placeholder={showPlaceholder ? placeholder : undefined}
 							onMouseUp={syncSelectionFromDom}
 							onKeyUp={syncSelectionFromDom}
 							ref={(el: HTMLElement | null) => {
@@ -92,7 +109,7 @@ export function BlockEditor({
 							contentEditable={!readOnly}
 							suppressContentEditableWarning
 							onInput={(event) => {
-							if (readOnly) return
+								if (readOnly) return;
 								const content = event.currentTarget.textContent ?? "";
 								// match shortcut
 								const shortcut = matchTextShortcut(content);
@@ -129,7 +146,7 @@ export function BlockEditor({
 								syncSelectionFromDom();
 							}}
 							onKeyDown={(event) => {
-							if (readOnly) return
+								if (readOnly) return;
 								if (slashMenu?.blockId === block.id) {
 									if (event.key === "ArrowDown") {
 										event.preventDefault();
