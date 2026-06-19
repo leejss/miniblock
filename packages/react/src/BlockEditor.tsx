@@ -62,6 +62,74 @@ export function BlockEditor({
 		setSelection(readSelectionFromDom(blocksRef.current));
 	};
 
+	// commit helper. commit: confirm editor state update
+	const commitBlockContent = (
+		blockId: string,
+		content: string,
+		element: HTMLElement,
+	) => {
+		const shortcut = matchTextShortcut(content);
+		if (shortcut) {
+			changeBlockType(blockId, shortcut.type, "");
+			setSlashMenu(null);
+			return;
+		}
+
+		// update editor state
+		updateBlock(blockId, { content });
+
+		// show slash menu
+		if (isSlashTrigger(content)) {
+			const { offsetHeight, offsetLeft, offsetTop } = element;
+
+			setSlashMenu({
+				blockId,
+				activeIndex: 0,
+				top: offsetTop + offsetHeight + 4,
+				left: offsetLeft,
+			});
+		} else {
+			setSlashMenu(null);
+		}
+	};
+
+	const handleNativeBeforeInput = (
+		event: InputEvent,
+		blockId: string,
+		blockContent: string,
+		blockElement: HTMLElement,
+	) => {
+		if (readOnly) return;
+		if (isComposingRef.current || event.isComposing) return;
+		if (isCompositionInput(event.inputType)) return;
+
+		const selection = window.getSelection();
+		const offset = getCollapsedOffsetInBlock(blockElement, selection);
+		if (offset === null) return;
+
+		if (event.inputType === "insertText") {
+			const text = event.data;
+			if (!text) return;
+
+			event.preventDefault();
+
+			const nextContent = insertTextAt(blockContent, offset, text);
+			const nextOffset = offset + text.length;
+
+			commitBlockContent(blockId, nextContent, blockElement);
+			setSelection({
+				anchor: { blockId, offset: nextOffset },
+				focus: { blockId, offset: nextOffset },
+			});
+			return;
+		}
+
+		if (event.inputType === "insertParagraph") {
+			event.preventDefault();
+			splitBlock(blockId, offset);
+		}
+	};
+
 	useLayoutEffect(() => {
 		applySelectionToDom(blocksRef.current, selection);
 	}, [selection]);
@@ -101,11 +169,7 @@ export function BlockEditor({
 								const shortcut = matchTextShortcut(content);
 
 								if (shortcut) {
-									changeBlockType(
-										block.id,
-										shortcut.type,
-										shortcut.nextContent,
-									);
+									changeBlockType(block.id, shortcut.type, "");
 									setSlashMenu(null);
 									return;
 								}
@@ -140,6 +204,18 @@ export function BlockEditor({
 								if (el) {
 									blocksRef.current.set(block.id, el);
 
+									if (!el.dataset.beforeInputAttached) {
+										el.dataset.beforeInputAttached = "true";
+										el.addEventListener("beforeinput", (event) => {
+											handleNativeBeforeInput(
+												event,
+												block.id,
+												block.content,
+												el,
+											);
+										});
+									}
+
 									if (
 										!isComposingRef.current &&
 										el.textContent !== block.content
@@ -153,7 +229,59 @@ export function BlockEditor({
 							key={block.id}
 							contentEditable={!readOnly}
 							suppressContentEditableWarning
+							// onBeforeInput={(event) => {
+							// 	// Let's update editor state
+							// 	if (readOnly) return;
+
+							// 	const inputEvent = event.nativeEvent as InputEvent;
+							// 	const inputType = inputEvent.inputType;
+							// 	if (isComposingRef.current || inputEvent.isComposing) return;
+							// 	if (isCompositionInput(inputType)) return;
+
+							// 	const selection = window.getSelection();
+							// 	const offset = getCollapsedOffsetInBlock(
+							// 		event.currentTarget,
+							// 		selection,
+							// 	);
+							// 	if (offset === null) return;
+
+							// 	if (inputType === "insertText") {
+							// 		const text = inputEvent.data;
+							// 		if (!text) return;
+
+							// 		event.preventDefault();
+							// 		const nextContent = insertTextAt(block.content, offset, text);
+							// 		const nextOffset = offset + text.length;
+
+							// 		commitBlockContent(
+							// 			block.id,
+							// 			nextContent,
+							// 			event.currentTarget,
+							// 		);
+
+							// 		// set collapsed selection
+							// 		setSelection({
+							// 			anchor: {
+							// 				blockId: block.id,
+							// 				offset: nextOffset,
+							// 			},
+							// 			focus: {
+							// 				blockId: block.id,
+							// 				offset: nextOffset,
+							// 			},
+							// 		});
+
+							// 		return;
+							// 	}
+
+							// 	if (inputType === "insertParagraph") {
+							// 		event.preventDefault();
+							// 		splitBlock(block.id, offset);
+							// 		return;
+							// 	}
+							// }}
 							onInput={(event) => {
+								return;
 								if (readOnly) return;
 								// if (isComposingRef.current || event.nativeEvent.isComposing)
 								// 	return;
@@ -162,11 +290,7 @@ export function BlockEditor({
 								const shortcut = matchTextShortcut(content);
 
 								if (shortcut) {
-									changeBlockType(
-										block.id,
-										shortcut.type,
-										shortcut.nextContent,
-									);
+									changeBlockType(block.id, shortcut.type, "");
 									setSlashMenu(null);
 									return;
 								}
@@ -232,7 +356,6 @@ export function BlockEditor({
 										event.preventDefault();
 										const item = blockCommands[slashMenu.activeIndex];
 										selectSlashItem(item.type);
-
 										return;
 									}
 
@@ -244,6 +367,7 @@ export function BlockEditor({
 								}
 
 								if (event.key === "Enter") {
+									if (isBeforeInputSupported()) return;
 									event.preventDefault();
 
 									const selection = window.getSelection();
@@ -411,4 +535,56 @@ function ensureTextNode(element: HTMLElement): Text | null {
 	}
 
 	return textNode instanceof Text ? textNode : null;
+}
+
+function isSlashTrigger(content: string) {
+	return content === "/" || content.endsWith(" /");
+}
+
+function isCompositionInput(inputType: string) {
+	return (
+		inputType === "insertCompositionText" ||
+		inputType === "deleteCompositionText"
+	);
+}
+
+function getCollapsedOffsetInBlock(
+	blockElement: HTMLElement,
+	selection: Selection | null,
+) {
+	// Guard
+
+	if (!selection?.isCollapsed) return null;
+	if (!selection.anchorNode || !selection.focusNode) return null;
+	if (!isNodeInsideElement(blockElement, selection.anchorNode)) return null;
+	if (!isNodeInsideElement(blockElement, selection.focusNode)) return null;
+
+	const contentLength = blockElement.textContent?.length ?? 0;
+
+	if (selection.anchorNode === blockElement) {
+		return Math.max(0, Math.min(selection.anchorOffset, contentLength));
+	}
+
+	if (selection.anchorNode instanceof Text) {
+		return Math.max(0, Math.min(selection.anchorOffset, contentLength));
+	}
+
+	return null;
+}
+
+function isNodeInsideElement(element: HTMLElement, node: Node) {
+	if (node === element) return true;
+	return element.contains(node);
+}
+
+function insertTextAt(content: string, offset: number, text: string) {
+	const safeOffset = Math.max(0, Math.min(offset, content.length));
+	return content.slice(0, safeOffset) + text + content.slice(safeOffset);
+}
+
+function isBeforeInputSupported() {
+	return (
+		typeof InputEvent !== "undefined" &&
+		typeof InputEvent.prototype.getTargetRanges === "function"
+	);
 }
