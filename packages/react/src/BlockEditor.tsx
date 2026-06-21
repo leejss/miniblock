@@ -1,5 +1,11 @@
 import type { BlockType, EditorSelection, EditorState } from "@miniblock/core";
-import { type CSSProperties, useLayoutEffect, useRef, useState } from "react";
+import {
+	type CSSProperties,
+	useCallback,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react";
 import { blockCommands } from "./commands";
 import { matchTextShortcut } from "./shortcuts";
 import "./styles.css";
@@ -11,6 +17,37 @@ type SlashMenuState = {
 	top: number;
 	left: number;
 };
+
+type TextRange = {
+	start: number;
+	end: number;
+};
+
+type BeforeInputCommand =
+	| {
+			type: "insertText";
+			blockId: string;
+			offset: number;
+			text: string;
+			blockElement: HTMLElement;
+	  }
+	| {
+			type: "splitBlock";
+			blockId: string;
+			offset: number;
+	  }
+	| {
+			type: "deleteBackward";
+			blockId: string;
+			range: TextRange;
+			blockElement: HTMLElement;
+	  }
+	| {
+			type: "deleteForward";
+			blockId: string;
+			range: TextRange;
+			blockElement: HTMLElement;
+	  };
 
 export type BlockEditorProps = {
 	value?: EditorState;
@@ -34,6 +71,7 @@ export function BlockEditor({
 	style,
 }: BlockEditorProps) {
 	const {
+		editor,
 		blocks,
 		selection,
 		updateBlock,
@@ -44,8 +82,10 @@ export function BlockEditor({
 		setSelection,
 	} = useBlockEditor({ onChange, defaultValue, value });
 
+	const editorRootRef = useRef<HTMLDivElement | null>(null);
 	const blocksRef = useRef(new Map<string, HTMLElement>());
 	const isComposingRef = useRef(false);
+	const beforeInputHandlerRef = useRef<(event: InputEvent) => void>(() => {});
 	const [slashMenu, setSlashMenu] = useState<SlashMenuState | null>(null);
 
 	const selectSlashItem = (type: BlockType) => {
@@ -63,72 +103,230 @@ export function BlockEditor({
 	};
 
 	// commit helper. commit: confirm editor state update
-	const commitBlockContent = (
-		blockId: string,
-		content: string,
-		element: HTMLElement,
-	) => {
-		const shortcut = matchTextShortcut(content);
-		if (shortcut) {
-			changeBlockType(blockId, shortcut.type, "");
-			setSlashMenu(null);
-			return;
-		}
+	const commitBlockContent = useCallback(
+		(blockId: string, content: string, element: HTMLElement) => {
+			const shortcut = matchTextShortcut(content);
+			if (shortcut) {
+				changeBlockType(blockId, shortcut.type, "");
+				// TODO:
+				// maybe we can call like
+				// updateBlock(blockId, {type: shortcut.type})
+				setSlashMenu(null);
+				return;
+			}
+			updateBlock(blockId, { content });
+			if (isSlashTrigger(content)) {
+				const { offsetHeight, offsetLeft, offsetTop } = element;
+				setSlashMenu({
+					blockId,
+					activeIndex: 0,
+					top: offsetTop + offsetHeight + 4,
+					left: offsetLeft,
+				});
+				return;
+			} else {
+				setSlashMenu(null);
+			}
+		},
+		[changeBlockType, updateBlock],
+	);
 
-		// update editor state
-		updateBlock(blockId, { content });
+	const dispatchBeforeInputCommand = useCallback(
+		(command: BeforeInputCommand) => {
+			const blocks = editor.getBlocks();
+			const block = blocks.find((block) => block.id === command.blockId);
+			if (!block) return;
 
-		// show slash menu
-		if (isSlashTrigger(content)) {
-			const { offsetHeight, offsetLeft, offsetTop } = element;
+			// insertText
+			if (command.type === "insertText") {
+				const nextContent = insertTextAt(
+					block.content,
+					command.offset,
+					command.text,
+				);
+				const nextOffset = command.offset + command.text.length;
+				commitBlockContent(command.blockId, nextContent, command.blockElement);
+				setSelection({
+					anchor: { blockId: command.blockId, offset: nextOffset },
+					focus: { blockId: command.blockId, offset: nextOffset },
+				});
+				return;
+			}
 
-			setSlashMenu({
-				blockId,
-				activeIndex: 0,
-				top: offsetTop + offsetHeight + 4,
-				left: offsetLeft,
-			});
-		} else {
-			setSlashMenu(null);
-		}
-	};
+			if (command.type === "splitBlock") {
+				splitBlock(command.blockId, command.offset);
+			}
 
-	const handleNativeBeforeInput = (
-		event: InputEvent,
-		blockId: string,
-		blockContent: string,
-		blockElement: HTMLElement,
-	) => {
-		if (readOnly) return;
-		if (isComposingRef.current || event.isComposing) return;
-		if (isCompositionInput(event.inputType)) return;
+			if (command.type === "deleteBackward") {
+				const { start, end } = command.range;
+				// Range Deletion
+				if (start !== end) {
+					const nextContent = deleteTextRange(block.content, start, end);
+					commitBlockContent(
+						command.blockId,
+						nextContent,
+						command.blockElement,
+					);
+					setSelection({
+						anchor: { blockId: command.blockId, offset: start },
+						focus: { blockId: command.blockId, offset: start },
+					});
+					return;
+				}
 
-		const selection = window.getSelection();
-		const offset = getCollapsedOffsetInBlock(blockElement, selection);
-		if (offset === null) return;
+				// Character Deletion
+				if (start > 0) {
+					const nextOffset = start - 1;
+					const nextContent = deleteTextRange(block.content, nextOffset, start);
+					commitBlockContent(
+						command.blockId,
+						nextContent,
+						command.blockElement,
+					);
+					setSelection({
+						anchor: { blockId: command.blockId, offset: nextOffset },
+						focus: { blockId: command.blockId, offset: nextOffset },
+					});
+					return;
+				}
 
-		if (event.inputType === "insertText") {
-			const text = event.data;
-			if (!text) return;
+				// Block Deletion
+				if (block.content.length === 0) {
+					deleteBlockBackward(command.blockId);
+				} else {
+					mergeBlockBackward(command.blockId);
+				}
 
-			event.preventDefault();
+				return;
+			}
 
-			const nextContent = insertTextAt(blockContent, offset, text);
-			const nextOffset = offset + text.length;
+			if (command.type === "deleteForward") {
+				const { start, end } = command.range;
 
-			commitBlockContent(blockId, nextContent, blockElement);
-			setSelection({
-				anchor: { blockId, offset: nextOffset },
-				focus: { blockId, offset: nextOffset },
-			});
-			return;
-		}
+				if (start !== end) {
+					const nextContent = deleteTextRange(block.content, start, end);
+					commitBlockContent(
+						command.blockId,
+						nextContent,
+						command.blockElement,
+					);
+					setSelection({
+						anchor: { blockId: command.blockId, offset: start },
+						focus: { blockId: command.blockId, offset: start },
+					});
+					return;
+				}
 
-		if (event.inputType === "insertParagraph") {
-			event.preventDefault();
-			splitBlock(blockId, offset);
-		}
-	};
+				if (start < block.content.length) {
+					const nextContent = deleteTextRange(block.content, start, start + 1);
+					commitBlockContent(
+						command.blockId,
+						nextContent,
+						command.blockElement,
+					);
+					setSelection({
+						anchor: { blockId: command.blockId, offset: start },
+						focus: { blockId: command.blockId, offset: start },
+					});
+					return;
+				}
+
+				const blockIndex = blocks.findIndex(
+					(block) => block.id === command.blockId,
+				);
+				const nextBlock = blocks[blockIndex + 1];
+				if (!nextBlock) return;
+
+				mergeBlockBackward(nextBlock.id);
+				return;
+			}
+		},
+		[
+			commitBlockContent,
+			editor,
+			setSelection,
+			splitBlock,
+			deleteBlockBackward,
+			mergeBlockBackward,
+		],
+	);
+
+	const handleNativeBeforeInput = useCallback(
+		(event: InputEvent) => {
+			if (readOnly) return;
+			if (isComposingRef.current || event.isComposing) return;
+			if (isCompositionInput(event.inputType)) return;
+
+			const blockElement = findClosestBlockElement(event.target);
+			if (!blockElement) return;
+
+			const blockId = blockElement.dataset.blockId;
+			if (!blockId) return;
+
+			const selection = window.getSelection();
+
+			if (event.inputType === "insertText") {
+				const offset = getCollapsedOffsetInBlock(blockElement, selection);
+				if (offset === null) return;
+				const text = event.data;
+				if (!text) return;
+				event.preventDefault();
+
+				dispatchBeforeInputCommand({
+					type: "insertText",
+					blockId,
+					offset,
+					text,
+					blockElement,
+				});
+
+				return;
+			}
+
+			if (event.inputType === "insertParagraph") {
+				const offset = getCollapsedOffsetInBlock(blockElement, selection);
+				if (offset === null) return;
+				event.preventDefault();
+				dispatchBeforeInputCommand({
+					type: "splitBlock",
+					blockId,
+					offset,
+				});
+				return;
+			}
+
+			if (event.inputType === "deleteContentBackward") {
+				const range = getSelectionRangeInBlock(blockElement, selection);
+				if (!range) return;
+				event.preventDefault();
+
+				dispatchBeforeInputCommand({
+					type: "deleteBackward",
+					blockId,
+					range,
+					blockElement,
+				});
+
+				return;
+			}
+			if (event.inputType === "deleteContentForward") {
+				const range = getSelectionRangeInBlock(blockElement, selection);
+				if (!range) return;
+				event.preventDefault();
+				dispatchBeforeInputCommand({
+					type: "deleteForward",
+					blockId,
+					range,
+					blockElement,
+				});
+			}
+		},
+		[dispatchBeforeInputCommand, readOnly],
+	);
+
+	useLayoutEffect(() => {
+		beforeInputHandlerRef.current = handleNativeBeforeInput;
+	}, [handleNativeBeforeInput]);
 
 	useLayoutEffect(() => {
 		applySelectionToDom(blocksRef.current, selection);
@@ -144,78 +342,46 @@ export function BlockEditor({
 		});
 	}, [autoFocus, firstBlockId, selection, readOnly, setSelection]);
 
+	useLayoutEffect(() => {
+		const root = editorRootRef.current;
+		if (!root) return;
+
+		const listener = (event: Event) => {
+			beforeInputHandlerRef.current(event as InputEvent);
+		};
+
+		root.addEventListener("beforeinput", listener);
+
+		return () => {
+			root.removeEventListener("beforeinput", listener);
+		};
+	}, []);
+
 	return (
 		<div
 			className={["mb-editor", className].filter(Boolean).join(" ")}
 			style={style}
 		>
-			<div className="mb-editor__page">
+			<div ref={editorRootRef} className="mb-editor__page">
 				{blocks.map((block) => {
 					const Block = block.type as BlockType;
 					const showPlaceholder =
 						Boolean(placeholder) &&
 						blocks.length === 1 &&
 						block.content.length === 0;
+
 					return (
 						<Block
-							className="mb-block"
-							onCompositionStart={() => {
-								isComposingRef.current = true;
-							}}
-							onCompositionEnd={(event) => {
-								isComposingRef.current = false;
-								if (readOnly) return;
-								const content = event.currentTarget.textContent ?? "";
-								const shortcut = matchTextShortcut(content);
-
-								if (shortcut) {
-									changeBlockType(block.id, shortcut.type, "");
-									setSlashMenu(null);
-									return;
-								}
-
-								updateBlock(block.id, {
-									content,
-								});
-
-								if (content === "/" || content.endsWith(" /")) {
-									const { offsetHeight, offsetLeft, offsetTop } =
-										event.currentTarget;
-
-									setSlashMenu({
-										blockId: block.id,
-										activeIndex: 0,
-										top: offsetTop + offsetHeight + 4,
-										left: offsetLeft,
-									});
-								} else {
-									setSlashMenu(null);
-								}
-								syncSelectionFromDom();
-							}}
+							key={block.id}
+							data-block-id={block.id}
 							data-block-type={block.type}
 							data-placeholder={showPlaceholder ? placeholder : undefined}
-							onMouseUp={syncSelectionFromDom}
-							onKeyUp={(e) => {
-								if (isComposingRef.current || e.nativeEvent.isComposing) return;
-								syncSelectionFromDom();
-							}}
+							contentEditable={!readOnly}
+							suppressContentEditableWarning
+							className="mb-block"
 							ref={(el: HTMLElement | null) => {
 								if (el) {
 									blocksRef.current.set(block.id, el);
-
-									if (!el.dataset.beforeInputAttached) {
-										el.dataset.beforeInputAttached = "true";
-										el.addEventListener("beforeinput", (event) => {
-											handleNativeBeforeInput(
-												event,
-												block.id,
-												block.content,
-												el,
-											);
-										});
-									}
-
 									if (
 										!isComposingRef.current &&
 										el.textContent !== block.content
@@ -226,94 +392,28 @@ export function BlockEditor({
 									blocksRef.current.delete(block.id);
 								}
 							}}
-							key={block.id}
-							contentEditable={!readOnly}
-							suppressContentEditableWarning
-							// onBeforeInput={(event) => {
-							// 	// Let's update editor state
-							// 	if (readOnly) return;
-
-							// 	const inputEvent = event.nativeEvent as InputEvent;
-							// 	const inputType = inputEvent.inputType;
-							// 	if (isComposingRef.current || inputEvent.isComposing) return;
-							// 	if (isCompositionInput(inputType)) return;
-
-							// 	const selection = window.getSelection();
-							// 	const offset = getCollapsedOffsetInBlock(
-							// 		event.currentTarget,
-							// 		selection,
-							// 	);
-							// 	if (offset === null) return;
-
-							// 	if (inputType === "insertText") {
-							// 		const text = inputEvent.data;
-							// 		if (!text) return;
-
-							// 		event.preventDefault();
-							// 		const nextContent = insertTextAt(block.content, offset, text);
-							// 		const nextOffset = offset + text.length;
-
-							// 		commitBlockContent(
-							// 			block.id,
-							// 			nextContent,
-							// 			event.currentTarget,
-							// 		);
-
-							// 		// set collapsed selection
-							// 		setSelection({
-							// 			anchor: {
-							// 				blockId: block.id,
-							// 				offset: nextOffset,
-							// 			},
-							// 			focus: {
-							// 				blockId: block.id,
-							// 				offset: nextOffset,
-							// 			},
-							// 		});
-
-							// 		return;
-							// 	}
-
-							// 	if (inputType === "insertParagraph") {
-							// 		event.preventDefault();
-							// 		splitBlock(block.id, offset);
-							// 		return;
-							// 	}
-							// }}
-							onInput={(event) => {
-								return;
+							onCompositionStart={() => {
+								isComposingRef.current = true;
+							}}
+							onCompositionEnd={(event) => {
+								isComposingRef.current = false;
 								if (readOnly) return;
-								// if (isComposingRef.current || event.nativeEvent.isComposing)
-								// 	return;
 								const content = event.currentTarget.textContent ?? "";
-								// match shortcut
-								const shortcut = matchTextShortcut(content);
-
-								if (shortcut) {
-									changeBlockType(block.id, shortcut.type, "");
-									setSlashMenu(null);
+								commitBlockContent(block.id, content, event.currentTarget);
+								syncSelectionFromDom();
+							}}
+							onMouseUp={syncSelectionFromDom}
+							onKeyUp={(e) => {
+								if (isComposingRef.current || e.nativeEvent.isComposing) return;
+								syncSelectionFromDom();
+							}}
+							onInput={(event) => {
+								if (readOnly) return;
+								if (isComposingRef.current || event.nativeEvent.isComposing)
 									return;
-								}
 
-								updateBlock(block.id, {
-									content,
-								});
-
-								if (content === "/" || content.endsWith(" /")) {
-									const { offsetHeight, offsetLeft, offsetTop } =
-										event.currentTarget;
-									// Open menu
-									setSlashMenu({
-										blockId: block.id,
-										activeIndex: 0,
-										top: offsetTop + offsetHeight + 4,
-										left: offsetLeft,
-									});
-								} else {
-									// Hide menu
-									setSlashMenu(null);
-								}
-
+								const content = event.currentTarget.textContent ?? "";
+								commitBlockContent(block.id, content, event.currentTarget);
 								syncSelectionFromDom();
 							}}
 							onKeyDown={(event) => {
@@ -378,6 +478,7 @@ export function BlockEditor({
 								}
 
 								if (event.key === "Backspace") {
+									if (isBeforeInputSupported()) return;
 									const selection = window.getSelection();
 									const isAtStart =
 										selection?.isCollapsed && selection.anchorOffset === 0;
@@ -552,24 +653,9 @@ function getCollapsedOffsetInBlock(
 	blockElement: HTMLElement,
 	selection: Selection | null,
 ) {
-	// Guard
-
-	if (!selection?.isCollapsed) return null;
-	if (!selection.anchorNode || !selection.focusNode) return null;
-	if (!isNodeInsideElement(blockElement, selection.anchorNode)) return null;
-	if (!isNodeInsideElement(blockElement, selection.focusNode)) return null;
-
-	const contentLength = blockElement.textContent?.length ?? 0;
-
-	if (selection.anchorNode === blockElement) {
-		return Math.max(0, Math.min(selection.anchorOffset, contentLength));
-	}
-
-	if (selection.anchorNode instanceof Text) {
-		return Math.max(0, Math.min(selection.anchorOffset, contentLength));
-	}
-
-	return null;
+	const range = getSelectionRangeInBlock(blockElement, selection);
+	if (!range || range.start !== range.end) return null;
+	return range.start;
 }
 
 function isNodeInsideElement(element: HTMLElement, node: Node) {
@@ -582,9 +668,68 @@ function insertTextAt(content: string, offset: number, text: string) {
 	return content.slice(0, safeOffset) + text + content.slice(safeOffset);
 }
 
+function deleteTextRange(content: string, start: number, end: number) {
+	const safeStart = Math.max(0, Math.min(start, content.length));
+	const safeEnd = Math.max(safeStart, Math.min(end, content.length));
+	return content.slice(0, safeStart) + content.slice(safeEnd);
+}
+
 function isBeforeInputSupported() {
 	return (
 		typeof InputEvent !== "undefined" &&
 		typeof InputEvent.prototype.getTargetRanges === "function"
 	);
+}
+
+function findClosestBlockElement(target: EventTarget | null) {
+	if (!(target instanceof Node)) return null;
+
+	const element = target instanceof HTMLElement ? target : target.parentElement;
+	return element?.closest<HTMLElement>("[data-block-id]") ?? null;
+}
+
+function getSelectionRangeInBlock(
+	blockElement: HTMLElement,
+	selection: Selection | null,
+): TextRange | null {
+	if (!selection || selection.rangeCount === 0) return null;
+	if (!selection.anchorNode || !selection.focusNode) return null;
+	if (!isNodeInsideElement(blockElement, selection.anchorNode)) return null;
+	if (!isNodeInsideElement(blockElement, selection.focusNode)) return null;
+
+	const anchorOffset = getDomPointOffsetInBlock(
+		blockElement,
+		selection.anchorNode,
+		selection.anchorOffset,
+	);
+
+	const focusOffset = getDomPointOffsetInBlock(
+		blockElement,
+		selection.focusNode,
+		selection.focusOffset,
+	);
+
+	if (anchorOffset === null || focusOffset === null) return null;
+
+	return {
+		start: Math.min(anchorOffset, focusOffset),
+		end: Math.max(anchorOffset, focusOffset),
+	};
+}
+
+function getDomPointOffsetInBlock(
+	blockElement: HTMLElement,
+	node: Node,
+	offset: number,
+) {
+	const range = document.createRange();
+	range.selectNodeContents(blockElement);
+
+	try {
+		range.setEnd(node, offset);
+		const contentLength = blockElement.textContent?.length ?? 0;
+		return Math.max(0, Math.min(range.toString().length, contentLength));
+	} catch {
+		return null;
+	}
 }
