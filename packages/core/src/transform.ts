@@ -123,3 +123,53 @@ export function changeBlockTypeState(
 		selection: createCollapsedSelection(input.blockId, content.length),
 	};
 }
+
+export function insertTextState(
+	state: EditorState,
+	input: { blockId: string; offset: number; text: string },
+): EditorState {
+	const block = state.blocks.find((block) => block.id === input.blockId);
+	if (!block) return state;
+
+	// block.content의 길이를 벗어나지 않도록 offset 조정
+	const offset = Math.max(0, Math.min(input.offset, block.content.length));
+	const newContent =
+		block.content.slice(0, offset) + input.text + block.content.slice(offset);
+
+	const newBlocks = state.blocks.map((b) =>
+		b.id === input.blockId ? { ...b, content: newContent } : b,
+	);
+
+	return {
+		...state,
+		blocks: newBlocks,
+		selection: createCollapsedSelection(
+			input.blockId,
+			offset + input.text.length,
+		),
+	};
+}
+export function deleteTextState(
+	state: EditorState,
+	input: { blockId: string; start: number; end: number },
+): EditorState {
+	const block = state.blocks.find((block) => block.id === input.blockId);
+	if (!block) return state;
+
+	const start = Math.max(0, Math.min(input.start, block.content.length));
+	const end = Math.max(start, Math.min(input.end, block.content.length));
+
+	if (start === end) return state;
+
+	const newContent = block.content.slice(0, start) + block.content.slice(end);
+
+	const newBlocks = state.blocks.map((b) =>
+		b.id === input.blockId ? { ...b, content: newContent } : b,
+	);
+
+	return {
+		...state,
+		blocks: newBlocks,
+		selection: createCollapsedSelection(input.blockId, start),
+	};
+}

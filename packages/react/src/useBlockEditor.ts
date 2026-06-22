@@ -29,7 +29,7 @@ export function useBlockEditor(options: UseBlockEditorOptions) {
 		() => editor.getState(),
 	);
 
-	const state = isControlled ? options.value! : storedState;
+	const state = options.value ?? storedState;
 
 	useLayoutEffect(() => {
 		if (!isControlled || !options.value) return;
@@ -47,11 +47,14 @@ export function useBlockEditor(options: UseBlockEditorOptions) {
 		state,
 		blocks: state.blocks,
 		selection: state.selection,
+		dispatch: editor.dispatch.bind(editor),
 		setSelection: editor.setSelection.bind(editor),
 		updateBlock: editor.updateBlock.bind(editor),
 		splitBlock: editor.splitBlock.bind(editor),
 		mergeBlockBackward: editor.mergeBlockBackward.bind(editor),
 		deleteBlockBackward: editor.deleteBlockBackward.bind(editor),
 		changeBlockType: editor.changeBlockType.bind(editor),
+		undo: editor.undo.bind(editor),
+		redo: editor.redo.bind(editor),
 	};
 }

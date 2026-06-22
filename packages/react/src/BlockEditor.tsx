@@ -23,7 +23,7 @@ type TextRange = {
 	end: number;
 };
 
-type BeforeInputCommand =
+type InputIntent =
 	| {
 			type: "insertText";
 			blockId: string;
@@ -102,6 +102,24 @@ export function BlockEditor({
 		setSelection(readSelectionFromDom(blocksRef.current));
 	};
 
+	const updateSlashMenu = useCallback(
+		(blockId: string, content: string, element: HTMLElement) => {
+			if (isSlashTrigger(content)) {
+				const { offsetHeight, offsetLeft, offsetTop } = element;
+				setSlashMenu({
+					blockId,
+					activeIndex: 0,
+					top: offsetTop + offsetHeight + 4,
+					left: offsetLeft,
+				});
+				return;
+			}
+
+			setSlashMenu(null);
+		},
+		[],
+	);
+
 	// commit helper. commit: confirm editor state update
 	const commitBlockContent = useCallback(
 		(blockId: string, content: string, element: HTMLElement) => {
@@ -115,24 +133,13 @@ export function BlockEditor({
 				return;
 			}
 			updateBlock(blockId, { content });
-			if (isSlashTrigger(content)) {
-				const { offsetHeight, offsetLeft, offsetTop } = element;
-				setSlashMenu({
-					blockId,
-					activeIndex: 0,
-					top: offsetTop + offsetHeight + 4,
-					left: offsetLeft,
-				});
-				return;
-			} else {
-				setSlashMenu(null);
-			}
+			updateSlashMenu(blockId, content, element);
 		},
-		[changeBlockType, updateBlock],
+		[changeBlockType, updateBlock, updateSlashMenu],
 	);
 
-	const dispatchBeforeInputCommand = useCallback(
-		(command: BeforeInputCommand) => {
+	const handleInputIntent = useCallback(
+		(command: InputIntent) => {
 			const blocks = editor.getBlocks();
 			const block = blocks.find((block) => block.id === command.blockId);
 			if (!block) return;
@@ -144,12 +151,24 @@ export function BlockEditor({
 					command.offset,
 					command.text,
 				);
-				const nextOffset = command.offset + command.text.length;
-				commitBlockContent(command.blockId, nextContent, command.blockElement);
-				setSelection({
-					anchor: { blockId: command.blockId, offset: nextOffset },
-					focus: { blockId: command.blockId, offset: nextOffset },
-				});
+				const shortcut = matchTextShortcut(nextContent);
+
+				if (shortcut) {
+					changeBlockType(command.blockId, shortcut.type, "");
+					setSlashMenu(null);
+					return;
+				}
+
+				editor.dispatch(
+					{
+						type: "insertText",
+						blockId: command.blockId,
+						offset: command.offset,
+						text: command.text,
+					},
+					{ history: "merge" },
+				);
+				updateSlashMenu(command.blockId, nextContent, command.blockElement);
 				return;
 			}
 
@@ -162,15 +181,16 @@ export function BlockEditor({
 				// Range Deletion
 				if (start !== end) {
 					const nextContent = deleteTextRange(block.content, start, end);
-					commitBlockContent(
-						command.blockId,
-						nextContent,
-						command.blockElement,
+					editor.dispatch(
+						{
+							type: "deleteText",
+							blockId: command.blockId,
+							start,
+							end,
+						},
+						{ history: "merge" },
 					);
-					setSelection({
-						anchor: { blockId: command.blockId, offset: start },
-						focus: { blockId: command.blockId, offset: start },
-					});
+					updateSlashMenu(command.blockId, nextContent, command.blockElement);
 					return;
 				}
 
@@ -178,15 +198,16 @@ export function BlockEditor({
 				if (start > 0) {
 					const nextOffset = start - 1;
 					const nextContent = deleteTextRange(block.content, nextOffset, start);
-					commitBlockContent(
-						command.blockId,
-						nextContent,
-						command.blockElement,
+					editor.dispatch(
+						{
+							type: "deleteText",
+							blockId: command.blockId,
+							start: nextOffset,
+							end: start,
+						},
+						{ history: "merge" },
 					);
-					setSelection({
-						anchor: { blockId: command.blockId, offset: nextOffset },
-						focus: { blockId: command.blockId, offset: nextOffset },
-					});
+					updateSlashMenu(command.blockId, nextContent, command.blockElement);
 					return;
 				}
 
@@ -205,29 +226,31 @@ export function BlockEditor({
 
 				if (start !== end) {
 					const nextContent = deleteTextRange(block.content, start, end);
-					commitBlockContent(
-						command.blockId,
-						nextContent,
-						command.blockElement,
+					editor.dispatch(
+						{
+							type: "deleteText",
+							blockId: command.blockId,
+							start,
+							end,
+						},
+						{ history: "merge" },
 					);
-					setSelection({
-						anchor: { blockId: command.blockId, offset: start },
-						focus: { blockId: command.blockId, offset: start },
-					});
+					updateSlashMenu(command.blockId, nextContent, command.blockElement);
 					return;
 				}
 
 				if (start < block.content.length) {
 					const nextContent = deleteTextRange(block.content, start, start + 1);
-					commitBlockContent(
-						command.blockId,
-						nextContent,
-						command.blockElement,
+					editor.dispatch(
+						{
+							type: "deleteText",
+							blockId: command.blockId,
+							start,
+							end: start + 1,
+						},
+						{ history: "merge" },
 					);
-					setSelection({
-						anchor: { blockId: command.blockId, offset: start },
-						focus: { blockId: command.blockId, offset: start },
-					});
+					updateSlashMenu(command.blockId, nextContent, command.blockElement);
 					return;
 				}
 
@@ -242,12 +265,12 @@ export function BlockEditor({
 			}
 		},
 		[
-			commitBlockContent,
+			changeBlockType,
 			editor,
-			setSelection,
 			splitBlock,
 			deleteBlockBackward,
 			mergeBlockBackward,
+			updateSlashMenu,
 		],
 	);
 
@@ -265,6 +288,18 @@ export function BlockEditor({
 
 			const selection = window.getSelection();
 
+			if (event.inputType === "historyUndo") {
+				event.preventDefault();
+				editor.undo();
+				return;
+			}
+
+			if (event.inputType === "historyRedo") {
+				event.preventDefault();
+				editor.redo();
+				return;
+			}
+
 			if (event.inputType === "insertText") {
 				const offset = getCollapsedOffsetInBlock(blockElement, selection);
 				if (offset === null) return;
@@ -272,7 +307,7 @@ export function BlockEditor({
 				if (!text) return;
 				event.preventDefault();
 
-				dispatchBeforeInputCommand({
+				handleInputIntent({
 					type: "insertText",
 					blockId,
 					offset,
@@ -287,7 +322,7 @@ export function BlockEditor({
 				const offset = getCollapsedOffsetInBlock(blockElement, selection);
 				if (offset === null) return;
 				event.preventDefault();
-				dispatchBeforeInputCommand({
+				handleInputIntent({
 					type: "splitBlock",
 					blockId,
 					offset,
@@ -300,7 +335,7 @@ export function BlockEditor({
 				if (!range) return;
 				event.preventDefault();
 
-				dispatchBeforeInputCommand({
+				handleInputIntent({
 					type: "deleteBackward",
 					blockId,
 					range,
@@ -313,7 +348,7 @@ export function BlockEditor({
 				const range = getSelectionRangeInBlock(blockElement, selection);
 				if (!range) return;
 				event.preventDefault();
-				dispatchBeforeInputCommand({
+				handleInputIntent({
 					type: "deleteForward",
 					blockId,
 					range,
@@ -321,7 +356,7 @@ export function BlockEditor({
 				});
 			}
 		},
-		[dispatchBeforeInputCommand, readOnly],
+		[editor, handleInputIntent, readOnly],
 	);
 
 	useLayoutEffect(() => {
@@ -420,6 +455,27 @@ export function BlockEditor({
 								if (readOnly) return;
 								if (isComposingRef.current || event.nativeEvent.isComposing)
 									return;
+
+								const key = event.key.toLowerCase();
+								const isModifierKey = event.metaKey || event.ctrlKey;
+								const isUndoKey =
+									isModifierKey && key === "z" && !event.shiftKey;
+								const isRedoKey =
+									isModifierKey &&
+									((key === "z" && event.shiftKey) || key === "y");
+
+								if (isUndoKey) {
+									event.preventDefault();
+									editor.undo();
+									return;
+								}
+
+								if (isRedoKey) {
+									event.preventDefault();
+									editor.redo();
+									return;
+								}
+
 								if (slashMenu?.blockId === block.id) {
 									if (event.key === "ArrowDown") {
 										event.preventDefault();
