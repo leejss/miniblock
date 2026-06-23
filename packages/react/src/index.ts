@@ -1,4 +1,4 @@
-export type { BlockEditorProps } from "./BlockEditor";
-export { BlockEditor } from "./BlockEditor";
-export type { UseBlockEditorOptions } from "./useBlockEditor";
-export { useBlockEditor } from "./useBlockEditor";
+export type { BlockEditorProps } from "./block-editor";
+export { BlockEditor } from "./block-editor";
+export type { UseBlockEditorOptions } from "./use-block-editor";
+export { useBlockEditor } from "./use-block-editor";

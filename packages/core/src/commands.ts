@@ -8,10 +8,6 @@ export type DispatchOptions = {
 
 export type EditorCommand =
 	| {
-			type: "setSelection";
-			selection: EditorSelection | null;
-	  }
-	| {
 			type: "updateBlock";
 			id: string;
 			patch: Partial<Block>;

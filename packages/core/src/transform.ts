@@ -1,5 +1,4 @@
 import { createBlock } from "./blocks";
-import { createCollapsedSelection } from "./selection";
 import type { Block, BlockType, EditorState } from "./types";
 
 export function splitBlockState(
@@ -39,7 +38,6 @@ export function splitBlockState(
 	return {
 		...state,
 		blocks,
-		selection: createCollapsedSelection(newBlock.id),
 	};
 }
 
@@ -52,7 +50,6 @@ export function mergeBlockBackwardState(
 
 	const currentBlock = state.blocks[index];
 	const previousBlock = state.blocks[index - 1];
-	const offset = previousBlock.content.length;
 
 	const mergedBlock: Block = {
 		...previousBlock,
@@ -68,7 +65,6 @@ export function mergeBlockBackwardState(
 	return {
 		...state,
 		blocks: nextBlocks,
-		selection: createCollapsedSelection(previousBlock.id, offset),
 	};
 }
 
@@ -82,8 +78,6 @@ export function deleteBlockBackwardState(
 
 	if (index <= 0) return state;
 
-	const previousBlock = state.blocks[index - 1];
-	const offset = previousBlock.content.length;
 	const nextBlocks = [
 		...state.blocks.slice(0, index),
 		...state.blocks.slice(index + 1),
@@ -91,7 +85,6 @@ export function deleteBlockBackwardState(
 	return {
 		...state,
 		blocks: nextBlocks,
-		selection: createCollapsedSelection(previousBlock.id, offset),
 	};
 }
 
@@ -120,7 +113,6 @@ export function changeBlockTypeState(
 	return {
 		...state,
 		blocks,
-		selection: createCollapsedSelection(input.blockId, content.length),
 	};
 }
 
@@ -143,10 +135,6 @@ export function insertTextState(
 	return {
 		...state,
 		blocks: newBlocks,
-		selection: createCollapsedSelection(
-			input.blockId,
-			offset + input.text.length,
-		),
 	};
 }
 export function deleteTextState(
@@ -170,6 +158,5 @@ export function deleteTextState(
 	return {
 		...state,
 		blocks: newBlocks,
-		selection: createCollapsedSelection(input.blockId, start),
 	};
 }

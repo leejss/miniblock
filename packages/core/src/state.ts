@@ -1,18 +1,16 @@
 import { createBlock } from "./blocks";
 import { createBlockId } from "./id";
-import { normalizeSelection } from "./selection";
 import {
 	type Block,
 	EDITOR_STATE_SCHEMA_VERSION,
 	type EditorState,
 } from "./types";
-import { isBlockType, isEditorSelection, isRecord } from "./validation";
+import { isBlockType, isRecord } from "./validation";
 
 export function createEmptyState(): EditorState {
 	return {
 		schemaVersion: EDITOR_STATE_SCHEMA_VERSION,
 		blocks: [createBlock({ id: createBlockId() })],
-		selection: null,
 	};
 }
 
@@ -21,13 +19,9 @@ export function normalizeState(value: unknown): EditorState {
 	const blocks = normalizeBlocks(value.blocks);
 
 	if (blocks.length === 0) return createEmptyState();
-	const selection = isEditorSelection(value.selection)
-		? normalizeSelection(blocks, value.selection)
-		: null;
 	return {
 		schemaVersion: EDITOR_STATE_SCHEMA_VERSION,
 		blocks,
-		selection,
 	};
 }
 

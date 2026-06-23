@@ -1,4 +1,4 @@
-import type { EditorState } from "@miniblock/core";
+import type { EditorSelection, EditorState } from "@miniblock/core";
 import { BlockEditor } from "@miniblock/react";
 import { useState } from "react";
 
@@ -21,19 +21,23 @@ const initialState: EditorState = {
 			content: "Edit this text and split blocks with Enter.",
 		},
 	],
-	selection: null,
 };
 
 export function App() {
 	const [state, setState] = useState(initialState);
+	const [selection, setSelection] = useState<EditorSelection | null>(null);
 
 	return (
 		<main className="demo-shell">
 			<section className="editor-surface" aria-label="miniblock editor demo">
-				<BlockEditor value={state} onChange={setState} />
+				<BlockEditor
+					value={state}
+					onChange={setState}
+					onSelectionChange={setSelection}
+				/>
 			</section>
 			<aside className="state-panel" aria-label="editor state">
-				<pre>{JSON.stringify(state, null, 2)}</pre>
+				<pre>{JSON.stringify({ state, selection }, null, 2)}</pre>
 			</aside>
 		</main>
 	);

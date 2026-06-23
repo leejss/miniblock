@@ -1,6 +1,6 @@
 import type { DispatchOptions, EditorCommand, HistoryPolicy } from "./commands";
 import { createBlockId } from "./id";
-import { normalizeSelection } from "./selection";
+import { createCollapsedSelection, normalizeSelection } from "./selection";
 import { createEmptyState, normalizeState } from "./state";
 import {
 	changeBlockTypeState,
@@ -10,12 +10,21 @@ import {
 	mergeBlockBackwardState,
 	splitBlockState,
 } from "./transform";
-import type { Block, BlockType, EditorSelection, EditorState } from "./types";
+import type {
+	Block,
+	BlockType,
+	EditorChange,
+	EditorRuntimeState,
+	EditorSelection,
+	EditorSnapshot,
+	EditorState,
+} from "./types";
 
-type Listener = (state: EditorState) => void;
+type Listener = (snapshot: EditorSnapshot, change: EditorChange) => void;
 
 type CommandResult = {
 	state: EditorState;
+	selection: EditorSelection | null;
 	inverse: EditorCommand | null;
 };
 
@@ -28,23 +37,56 @@ type HistoryRecord = {
 
 export class MiniBlockCore {
 	private state: EditorState;
+	private runtime: EditorRuntimeState;
+	private snapshot: EditorSnapshot;
 	private listeners = new Set<Listener>();
 	private past: HistoryRecord[] = [];
 	private future: HistoryRecord[] = [];
 
-	constructor(initialState?: EditorState) {
+	constructor(
+		initialState?: EditorState,
+		initialSelection?: EditorSelection | null,
+	) {
 		this.state = initialState
 			? normalizeState(initialState)
 			: createEmptyState();
+		this.runtime = {
+			selection: normalizeSelection(
+				this.state.blocks,
+				initialSelection ?? null,
+			),
+		};
+		this.snapshot = this.createSnapshot();
 	}
 
 	setState(nextState: EditorState, options?: { emit: boolean }) {
-		this.state = normalizeState(nextState);
-		if (options?.emit) this.emit();
+		const state = normalizeState(nextState);
+		const selection = normalizeSelection(state.blocks, this.runtime.selection);
+		const stateChanged = state !== this.state;
+		const selectionChanged = !isSelectionEqual(
+			selection,
+			this.runtime.selection,
+		);
+
+		this.state = state;
+		this.runtime = { selection };
+		this.snapshot = this.createSnapshot();
+
+		if (options?.emit) {
+			this.emit({ stateChanged, selectionChanged });
+		}
 	}
 
 	getState() {
 		return this.state;
+	}
+
+	getSelection() {
+		return this.runtime.selection;
+	}
+
+	getSnapshot() {
+		return this.snapshot;
 	}
 
 	getBlocks() {
@@ -58,13 +100,19 @@ export class MiniBlockCore {
 		};
 	}
 
-	setSelection(selection: EditorSelection | null) {
-		this.dispatch(
-			{ type: "setSelection", selection },
-			{
-				history: "skip",
-			},
-		);
+	setSelection(
+		selection: EditorSelection | null,
+		options?: { emit?: boolean },
+	) {
+		const nextSelection = normalizeSelection(this.state.blocks, selection);
+		if (isSelectionEqual(this.runtime.selection, nextSelection)) return;
+
+		this.runtime = { selection: nextSelection };
+		this.snapshot = this.createSnapshot();
+
+		if (options?.emit !== false) {
+			this.emit({ stateChanged: false, selectionChanged: true });
+		}
 	}
 
 	updateBlock(id: string, patch: Partial<Block>) {
@@ -76,9 +124,18 @@ export class MiniBlockCore {
 		);
 	}
 
-	private emit() {
+	private createSnapshot(): EditorSnapshot {
+		return {
+			state: this.state,
+			runtime: this.runtime,
+		};
+	}
+
+	private emit(change: EditorChange) {
+		if (!change.stateChanged && !change.selectionChanged) return;
+
 		for (const listener of this.listeners) {
-			listener(this.state);
+			listener(this.snapshot, change);
 		}
 	}
 
@@ -131,31 +188,42 @@ export class MiniBlockCore {
 		const record = this.past.pop();
 		if (!record) return;
 
-		const result = this.applyCommand(this.state, record.inverse);
+		const result = this.applyCommand(
+			this.state,
+			this.runtime.selection,
+			record.inverse,
+		);
+		const selection = normalizeSelection(
+			result.state.blocks,
+			record.selectionBefore,
+		);
 
 		this.future.push(record);
-		this.state = {
-			...result.state,
-			selection: normalizeSelection(
-				result.state.blocks,
-				record.selectionBefore,
-			),
-		};
-		this.emit();
+		this.state = result.state;
+		this.runtime = { selection };
+		this.snapshot = this.createSnapshot();
+		this.emit({ stateChanged: true, selectionChanged: true });
 	}
 
 	redo() {
 		const record = this.future.pop();
 		if (!record) return;
 
-		const result = this.applyCommand(this.state, record.command);
+		const result = this.applyCommand(
+			this.state,
+			this.runtime.selection,
+			record.command,
+		);
+		const selection = normalizeSelection(
+			result.state.blocks,
+			record.selectionAfter,
+		);
 
 		this.past.push(record);
-		this.state = {
-			...result.state,
-			selection: normalizeSelection(result.state.blocks, record.selectionAfter),
-		};
-		this.emit();
+		this.state = result.state;
+		this.runtime = { selection };
+		this.snapshot = this.createSnapshot();
+		this.emit({ stateChanged: true, selectionChanged: true });
 	}
 
 	private recordHistory(record: HistoryRecord, history: HistoryPolicy) {
@@ -174,12 +242,16 @@ export class MiniBlockCore {
 		this.future = [];
 	}
 
-	// 상태변경 진입점
 	dispatch(command: EditorCommand, options: DispatchOptions = {}) {
-		const selectionBefore = this.state.selection;
-		const result = this.applyCommand(this.state, command);
+		const selectionBefore = this.runtime.selection;
+		const result = this.applyCommand(this.state, selectionBefore, command);
+		const stateChanged = result.state !== this.state;
+		const selectionChanged = !isSelectionEqual(
+			result.selection,
+			this.runtime.selection,
+		);
 
-		if (result.state === this.state) return;
+		if (!stateChanged && !selectionChanged) return;
 
 		const history = options.history ?? "record";
 
@@ -189,55 +261,42 @@ export class MiniBlockCore {
 					command,
 					inverse: result.inverse,
 					selectionBefore,
-					selectionAfter: result.state.selection,
+					selectionAfter: result.selection,
 				},
 				history,
 			);
 		}
 
 		this.state = result.state;
-		this.emit();
+		this.runtime = { selection: result.selection };
+		this.snapshot = this.createSnapshot();
+		this.emit({ stateChanged, selectionChanged });
 	}
+
 	private applyCommand(
 		state: EditorState,
+		selection: EditorSelection | null,
 		command: EditorCommand,
 	): CommandResult {
-		if (command.type === "setSelection") {
-			const nextState = {
-				...state,
-				selection: normalizeSelection(state.blocks, command.selection),
-			};
-
-			return {
-				state: nextState,
-				inverse: {
-					type: "setSelection",
-					selection: state.selection,
-				},
-			};
-		}
-
 		if (command.type === "updateBlock") {
 			const index = state.blocks.findIndex((block) => block.id === command.id);
-			if (index === -1) return unchanged(state);
+			if (index === -1) return unchanged(state, selection);
 
 			const previousBlock = state.blocks[index];
 			const blocks = state.blocks.map((block) =>
 				block.id === command.id ? { ...block, ...command.patch } : block,
 			);
+			const nextState = { ...state, blocks };
 
 			return {
-				state: {
-					...state,
-					blocks,
-					selection: normalizeSelection(blocks, state.selection),
-				},
+				state: nextState,
+				selection: normalizeSelection(blocks, selection),
 				inverse: {
 					type: "replaceBlocks",
 					start: index,
 					deleteCount: 1,
 					blocks: [previousBlock],
-					selection: state.selection,
+					selection,
 				},
 			};
 		}
@@ -246,25 +305,31 @@ export class MiniBlockCore {
 			const index = state.blocks.findIndex(
 				(block) => block.id === command.blockId,
 			);
-			if (index === -1) return unchanged(state);
+			if (index === -1) return unchanged(state, selection);
 
 			const previousBlock = state.blocks[index];
+			const block = state.blocks[index];
+			const offset = Math.max(
+				0,
+				Math.min(command.offset, block.content.length),
+			);
 			const nextState = splitBlockState(state, {
 				blockId: command.blockId,
-				offset: command.offset,
+				offset,
 				newBlockId: command.newBlockId,
 			});
 
-			if (nextState === state) return unchanged(state);
+			if (nextState === state) return unchanged(state, selection);
 
 			return {
 				state: nextState,
+				selection: createCollapsedSelection(command.newBlockId),
 				inverse: {
 					type: "replaceBlocks",
 					start: index,
 					deleteCount: 2,
 					blocks: [previousBlock],
-					selection: state.selection,
+					selection,
 				},
 			};
 		}
@@ -273,24 +338,26 @@ export class MiniBlockCore {
 			const index = state.blocks.findIndex(
 				(block) => block.id === command.blockId,
 			);
-			if (index <= 0) return unchanged(state);
+			if (index <= 0) return unchanged(state, selection);
 
 			const previousBlock = state.blocks[index - 1];
 			const currentBlock = state.blocks[index];
+			const offset = previousBlock.content.length;
 			const nextState = mergeBlockBackwardState(state, {
 				blockId: command.blockId,
 			});
 
-			if (nextState === state) return unchanged(state);
+			if (nextState === state) return unchanged(state, selection);
 
 			return {
 				state: nextState,
+				selection: createCollapsedSelection(previousBlock.id, offset),
 				inverse: {
 					type: "replaceBlocks",
 					start: index - 1,
 					deleteCount: 1,
 					blocks: [previousBlock, currentBlock],
-					selection: state.selection,
+					selection,
 				},
 			};
 		}
@@ -299,23 +366,26 @@ export class MiniBlockCore {
 			const index = state.blocks.findIndex(
 				(block) => block.id === command.blockId,
 			);
-			if (index <= 0) return unchanged(state);
+			if (index <= 0) return unchanged(state, selection);
 
+			const previousBlock = state.blocks[index - 1];
 			const deletedBlock = state.blocks[index];
+			const offset = previousBlock.content.length;
 			const nextState = deleteBlockBackwardState(state, {
 				blockId: command.blockId,
 			});
 
-			if (nextState === state) return unchanged(state);
+			if (nextState === state) return unchanged(state, selection);
 
 			return {
 				state: nextState,
+				selection: createCollapsedSelection(previousBlock.id, offset),
 				inverse: {
 					type: "replaceBlocks",
 					start: index,
 					deleteCount: 0,
 					blocks: [deletedBlock],
-					selection: state.selection,
+					selection,
 				},
 			};
 		}
@@ -324,34 +394,36 @@ export class MiniBlockCore {
 			const index = state.blocks.findIndex(
 				(block) => block.id === command.blockId,
 			);
-			if (index === -1) return unchanged(state);
+			if (index === -1) return unchanged(state, selection);
 
 			const previousBlock = state.blocks[index];
+			const content = command.newContent ?? previousBlock.content;
 			const nextState = changeBlockTypeState(state, {
 				blockId: command.blockId,
 				type: command.blockType,
 				newContent: command.newContent,
 			});
 
-			if (nextState === state) return unchanged(state);
+			if (nextState === state) return unchanged(state, selection);
 
 			return {
 				state: nextState,
+				selection: createCollapsedSelection(command.blockId, content.length),
 				inverse: {
 					type: "replaceBlocks",
 					start: index,
 					deleteCount: 1,
 					blocks: [previousBlock],
-					selection: state.selection,
+					selection,
 				},
 			};
 		}
 
 		if (command.type === "insertText") {
-			if (command.text.length === 0) return unchanged(state);
+			if (command.text.length === 0) return unchanged(state, selection);
 
 			const block = state.blocks.find((block) => block.id === command.blockId);
-			if (!block) return unchanged(state);
+			if (!block) return unchanged(state, selection);
 
 			const offset = Math.max(
 				0,
@@ -363,10 +435,14 @@ export class MiniBlockCore {
 				text: command.text,
 			});
 
-			if (nextState === state) return unchanged(state);
+			if (nextState === state) return unchanged(state, selection);
 
 			return {
 				state: nextState,
+				selection: createCollapsedSelection(
+					command.blockId,
+					offset + command.text.length,
+				),
 				inverse: {
 					type: "deleteText",
 					blockId: command.blockId,
@@ -378,11 +454,11 @@ export class MiniBlockCore {
 
 		if (command.type === "deleteText") {
 			const block = state.blocks.find((block) => block.id === command.blockId);
-			if (!block) return unchanged(state);
+			if (!block) return unchanged(state, selection);
 
 			const start = Math.max(0, Math.min(command.start, block.content.length));
 			const end = Math.max(start, Math.min(command.end, block.content.length));
-			if (start === end) return unchanged(state);
+			if (start === end) return unchanged(state, selection);
 
 			const deletedText = block.content.slice(start, end);
 			const nextState = deleteTextState(state, {
@@ -391,10 +467,11 @@ export class MiniBlockCore {
 				end,
 			});
 
-			if (nextState === state) return unchanged(state);
+			if (nextState === state) return unchanged(state, selection);
 
 			return {
 				state: nextState,
+				selection: createCollapsedSelection(command.blockId, start),
 				inverse: {
 					type: "insertText",
 					blockId: command.blockId,
@@ -417,33 +494,52 @@ export class MiniBlockCore {
 				...state.blocks.slice(start + deleteCount),
 			];
 
-			if (blocks.length === 0) return unchanged(state);
+			if (blocks.length === 0) return unchanged(state, selection);
 
 			return {
 				state: {
 					...state,
 					blocks,
-					selection: normalizeSelection(blocks, command.selection),
 				},
+				selection: normalizeSelection(blocks, command.selection),
 				inverse: {
 					type: "replaceBlocks",
 					start,
 					deleteCount: command.blocks.length,
 					blocks: removedBlocks,
-					selection: state.selection,
+					selection,
 				},
 			};
 		}
 
-		return unchanged(state);
+		return unchanged(state, selection);
 	}
 }
 
-function unchanged(state: EditorState): CommandResult {
+function unchanged(
+	state: EditorState,
+	selection: EditorSelection | null,
+): CommandResult {
 	return {
 		state,
+		selection,
 		inverse: null,
 	};
+}
+
+function isSelectionEqual(
+	left: EditorSelection | null,
+	right: EditorSelection | null,
+) {
+	if (left === right) return true;
+	if (!left || !right) return false;
+
+	return (
+		left.anchor.blockId === right.anchor.blockId &&
+		left.anchor.offset === right.anchor.offset &&
+		left.focus.blockId === right.focus.blockId &&
+		left.focus.offset === right.focus.offset
+	);
 }
 
 function mergeHistoryRecord(

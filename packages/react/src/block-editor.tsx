@@ -7,20 +7,23 @@ import {
 	useState,
 } from "react";
 import { blockCommands } from "./commands";
+import {
+	applySelectionToDom,
+	getCaretOffsetWithinBlock,
+	getCollapsedOffsetInBlock,
+	getSelectionRangeInBlock,
+	readSelectionFromDom,
+	type TextRange,
+} from "./dom-selection";
 import { matchTextShortcut } from "./shortcuts";
 import "./styles.css";
-import { useBlockEditor } from "./useBlockEditor";
+import { useBlockEditor } from "./use-block-editor";
 
 type SlashMenuState = {
 	blockId: string;
 	activeIndex: number;
 	top: number;
 	left: number;
-};
-
-type TextRange = {
-	start: number;
-	end: number;
 };
 
 type InputIntent =
@@ -53,6 +56,9 @@ export type BlockEditorProps = {
 	value?: EditorState;
 	defaultValue?: EditorState;
 	onChange?: (state: EditorState) => void;
+	selection?: EditorSelection | null;
+	defaultSelection?: EditorSelection | null;
+	onSelectionChange?: (selection: EditorSelection | null) => void;
 	readOnly?: string;
 	autoFocus?: boolean;
 	placeholder?: string;
@@ -64,6 +70,9 @@ export function BlockEditor({
 	onChange,
 	defaultValue,
 	value,
+	selection: controlledSelection,
+	defaultSelection,
+	onSelectionChange,
 	autoFocus = true,
 	className,
 	placeholder,
@@ -80,13 +89,25 @@ export function BlockEditor({
 		deleteBlockBackward,
 		changeBlockType,
 		setSelection,
-	} = useBlockEditor({ onChange, defaultValue, value });
+	} = useBlockEditor({
+		onChange,
+		defaultValue,
+		value,
+		selection: controlledSelection,
+		defaultSelection,
+		onSelectionChange,
+	});
 
 	const editorRootRef = useRef<HTMLDivElement | null>(null);
 	const blocksRef = useRef(new Map<string, HTMLElement>());
 	const isComposingRef = useRef(false);
+	const pendingApplySelectionRef = useRef(false);
 	const beforeInputHandlerRef = useRef<(event: InputEvent) => void>(() => {});
 	const [slashMenu, setSlashMenu] = useState<SlashMenuState | null>(null);
+
+	const markApplyNeeded = useCallback(() => {
+		pendingApplySelectionRef.current = true;
+	}, []);
 
 	const selectSlashItem = (type: BlockType) => {
 		if (!slashMenu) return;
@@ -94,6 +115,7 @@ export function BlockEditor({
 		const content = element?.textContent ?? "";
 		const nextContent = content === "/" ? "" : content.replace(/ \/$/, "");
 
+		markApplyNeeded();
 		changeBlockType(slashMenu.blockId, type, nextContent);
 		setSlashMenu(null);
 	};
@@ -101,6 +123,16 @@ export function BlockEditor({
 	const syncSelectionFromDom = () => {
 		setSelection(readSelectionFromDom(blocksRef.current));
 	};
+
+	const importSelectionForCommand = useCallback(() => {
+		const importedSelection = readSelectionFromDom(blocksRef.current);
+		if (importedSelection) {
+			editor.setSelection(importedSelection, { emit: false });
+			return importedSelection;
+		}
+
+		return editor.getSelection();
+	}, [editor]);
 
 	const updateSlashMenu = useCallback(
 		(blockId: string, content: string, element: HTMLElement) => {
@@ -125,6 +157,7 @@ export function BlockEditor({
 		(blockId: string, content: string, element: HTMLElement) => {
 			const shortcut = matchTextShortcut(content);
 			if (shortcut) {
+				markApplyNeeded();
 				changeBlockType(blockId, shortcut.type, "");
 				// TODO:
 				// maybe we can call like
@@ -135,7 +168,7 @@ export function BlockEditor({
 			updateBlock(blockId, { content });
 			updateSlashMenu(blockId, content, element);
 		},
-		[changeBlockType, updateBlock, updateSlashMenu],
+		[changeBlockType, markApplyNeeded, updateBlock, updateSlashMenu],
 	);
 
 	const handleInputIntent = useCallback(
@@ -146,6 +179,7 @@ export function BlockEditor({
 
 			// insertText
 			if (command.type === "insertText") {
+				markApplyNeeded();
 				const nextContent = insertTextAt(
 					block.content,
 					command.offset,
@@ -173,10 +207,12 @@ export function BlockEditor({
 			}
 
 			if (command.type === "splitBlock") {
+				markApplyNeeded();
 				splitBlock(command.blockId, command.offset);
 			}
 
 			if (command.type === "deleteBackward") {
+				markApplyNeeded();
 				const { start, end } = command.range;
 				// Range Deletion
 				if (start !== end) {
@@ -222,6 +258,7 @@ export function BlockEditor({
 			}
 
 			if (command.type === "deleteForward") {
+				markApplyNeeded();
 				const { start, end } = command.range;
 
 				if (start !== end) {
@@ -267,6 +304,7 @@ export function BlockEditor({
 		[
 			changeBlockType,
 			editor,
+			markApplyNeeded,
 			splitBlock,
 			deleteBlockBackward,
 			mergeBlockBackward,
@@ -286,16 +324,19 @@ export function BlockEditor({
 			const blockId = blockElement.dataset.blockId;
 			if (!blockId) return;
 
+			importSelectionForCommand();
 			const selection = window.getSelection();
 
 			if (event.inputType === "historyUndo") {
 				event.preventDefault();
+				markApplyNeeded();
 				editor.undo();
 				return;
 			}
 
 			if (event.inputType === "historyRedo") {
 				event.preventDefault();
+				markApplyNeeded();
 				editor.redo();
 				return;
 			}
@@ -356,7 +397,13 @@ export function BlockEditor({
 				});
 			}
 		},
-		[editor, handleInputIntent, readOnly],
+		[
+			editor,
+			handleInputIntent,
+			importSelectionForCommand,
+			markApplyNeeded,
+			readOnly,
+		],
 	);
 
 	useLayoutEffect(() => {
@@ -364,18 +411,33 @@ export function BlockEditor({
 	}, [handleNativeBeforeInput]);
 
 	useLayoutEffect(() => {
-		applySelectionToDom(blocksRef.current, selection);
-	}, [selection]);
+		if (!pendingApplySelectionRef.current) return;
+		pendingApplySelectionRef.current = false;
+		applySelectionToDom(blocksRef.current, editor.getSelection());
+	});
+
+	useLayoutEffect(() => {
+		if (controlledSelection === undefined) return;
+		applySelectionToDom(blocksRef.current, controlledSelection);
+	}, [controlledSelection]);
 
 	const firstBlockId = blocks[0]?.id;
 	useLayoutEffect(() => {
 		if (!autoFocus || !firstBlockId || selection || readOnly) return;
 
+		markApplyNeeded();
 		setSelection({
 			anchor: { blockId: firstBlockId, offset: 0 },
 			focus: { blockId: firstBlockId, offset: 0 },
 		});
-	}, [autoFocus, firstBlockId, selection, readOnly, setSelection]);
+	}, [
+		autoFocus,
+		firstBlockId,
+		markApplyNeeded,
+		selection,
+		readOnly,
+		setSelection,
+	]);
 
 	useLayoutEffect(() => {
 		const root = editorRootRef.current;
@@ -466,12 +528,14 @@ export function BlockEditor({
 
 								if (isUndoKey) {
 									event.preventDefault();
+									markApplyNeeded();
 									editor.undo();
 									return;
 								}
 
 								if (isRedoKey) {
 									event.preventDefault();
+									markApplyNeeded();
 									editor.redo();
 									return;
 								}
@@ -526,24 +590,33 @@ export function BlockEditor({
 									if (isBeforeInputSupported()) return;
 									event.preventDefault();
 
-									const selection = window.getSelection();
-									const offset = selection?.anchorOffset ?? 0;
+									importSelectionForCommand();
+									const offset =
+										getCollapsedOffsetInBlock(
+											event.currentTarget,
+											window.getSelection(),
+										) ?? 0;
 
+									markApplyNeeded();
 									splitBlock(block.id, offset);
 									return;
 								}
 
 								if (event.key === "Backspace") {
 									if (isBeforeInputSupported()) return;
-									const selection = window.getSelection();
-									const isAtStart =
-										selection?.isCollapsed && selection.anchorOffset === 0;
+									importSelectionForCommand();
+									const range = getSelectionRangeInBlock(
+										event.currentTarget,
+										window.getSelection(),
+									);
+									const isAtStart = range?.start === 0 && range.end === 0;
 									if (!isAtStart) return;
 									event.preventDefault();
 
 									const isEmpty =
 										(event.currentTarget.textContent ?? "") === "";
 
+									markApplyNeeded();
 									isEmpty
 										? deleteBlockBackward(block.id)
 										: mergeBlockBackward(block.id);
@@ -553,19 +626,27 @@ export function BlockEditor({
 
 								if (event.key === "ArrowUp" || event.key === "ArrowDown") {
 									event.preventDefault();
+									importSelectionForCommand();
 
 									const index = blocks.findIndex(
 										(item) => item.id === block.id,
 									);
 
+									// Remove block ? or sync
 									if (index === -1) return;
-
-									const nextIndex =
+									const idxCandidate =
 										event.key === "ArrowUp" ? index - 1 : index + 1;
-									const nextBlock = blocks[nextIndex];
+									// Handle Out of Bound.
+									const nextIdx = Math.max(
+										0,
+										Math.min(idxCandidate, blocks.length - 1),
+									);
+									const nextBlock = blocks[nextIdx];
 									if (!nextBlock) return;
-
-									const offset = getCaretOffset();
+									// TODO: 블록 기준으로 텍스트의 몇번째 offset인지 계산해서 이동해야함.
+									const offset = getCaretOffsetWithinBlock(event.currentTarget);
+									// Move caret to next block.
+									markApplyNeeded();
 									setSelection({
 										anchor: { blockId: nextBlock.id, offset },
 										focus: { blockId: nextBlock.id, offset },
@@ -600,100 +681,6 @@ export function BlockEditor({
 	);
 }
 
-function getCaretOffset() {
-	const selection = window.getSelection();
-	if (!selection?.isCollapsed) return 0;
-	return selection.anchorOffset;
-}
-
-function readSelectionFromDom(
-	blocksRef: Map<string, HTMLElement>,
-): EditorSelection | null {
-	const selection = window.getSelection();
-	if (!selection || selection.rangeCount === 0) return null;
-
-	const anchorBlockId = findSelectedBlockId(blocksRef, selection.anchorNode);
-	const focusBlockId = findSelectedBlockId(blocksRef, selection.focusNode);
-
-	if (!anchorBlockId || !focusBlockId) return null;
-
-	return {
-		anchor: {
-			blockId: anchorBlockId,
-			offset: selection.anchorOffset,
-		},
-		focus: {
-			blockId: focusBlockId,
-			offset: selection.focusOffset,
-		},
-	};
-}
-
-function findSelectedBlockId(
-	blocksRef: Map<string, HTMLElement>,
-	node: Node | null,
-): string | null {
-	if (!node) return null;
-
-	const element = node instanceof HTMLElement ? node : node.parentElement;
-
-	if (!element) return null;
-
-	for (const [blockId, blockElement] of blocksRef) {
-		if (blockElement.contains(element)) {
-			return blockId;
-		}
-	}
-
-	return null;
-}
-
-function applySelectionToDom(
-	blocksRef: Map<string, HTMLElement>,
-	editorSelection: EditorSelection | null,
-) {
-	if (!editorSelection) return;
-
-	const anchorBlockElement = blocksRef.get(editorSelection.anchor.blockId);
-	const focusBlockElement = blocksRef.get(editorSelection.focus.blockId);
-
-	if (!anchorBlockElement || !focusBlockElement) return;
-
-	// GET TextNode
-	const anchorTextNode = ensureTextNode(anchorBlockElement);
-	const focusTextNode = ensureTextNode(focusBlockElement);
-	if (!anchorTextNode || !focusTextNode) return;
-
-	const anchorOffset = Math.min(
-		editorSelection.anchor.offset,
-		anchorTextNode.textContent?.length ?? 0,
-	);
-	const focusOffset = Math.min(
-		editorSelection.focus.offset,
-		focusTextNode.textContent?.length ?? 0,
-	);
-
-	const domSelection = document.getSelection();
-	domSelection?.removeAllRanges();
-	domSelection?.setBaseAndExtent(
-		anchorTextNode,
-		anchorOffset,
-		focusTextNode,
-		focusOffset,
-	);
-}
-
-function ensureTextNode(element: HTMLElement): Text | null {
-	let textNode = element.firstChild;
-
-	if (!textNode) {
-		textNode = document.createTextNode("");
-		element.appendChild(textNode);
-	}
-
-	return textNode instanceof Text ? textNode : null;
-}
-
 function isSlashTrigger(content: string) {
 	return content === "/" || content.endsWith(" /");
 }
@@ -703,20 +690,6 @@ function isCompositionInput(inputType: string) {
 		inputType === "insertCompositionText" ||
 		inputType === "deleteCompositionText"
 	);
-}
-
-function getCollapsedOffsetInBlock(
-	blockElement: HTMLElement,
-	selection: Selection | null,
-) {
-	const range = getSelectionRangeInBlock(blockElement, selection);
-	if (!range || range.start !== range.end) return null;
-	return range.start;
-}
-
-function isNodeInsideElement(element: HTMLElement, node: Node) {
-	if (node === element) return true;
-	return element.contains(node);
 }
 
 function insertTextAt(content: string, offset: number, text: string) {
@@ -742,50 +715,4 @@ function findClosestBlockElement(target: EventTarget | null) {
 
 	const element = target instanceof HTMLElement ? target : target.parentElement;
 	return element?.closest<HTMLElement>("[data-block-id]") ?? null;
-}
-
-function getSelectionRangeInBlock(
-	blockElement: HTMLElement,
-	selection: Selection | null,
-): TextRange | null {
-	if (!selection || selection.rangeCount === 0) return null;
-	if (!selection.anchorNode || !selection.focusNode) return null;
-	if (!isNodeInsideElement(blockElement, selection.anchorNode)) return null;
-	if (!isNodeInsideElement(blockElement, selection.focusNode)) return null;
-
-	const anchorOffset = getDomPointOffsetInBlock(
-		blockElement,
-		selection.anchorNode,
-		selection.anchorOffset,
-	);
-
-	const focusOffset = getDomPointOffsetInBlock(
-		blockElement,
-		selection.focusNode,
-		selection.focusOffset,
-	);
-
-	if (anchorOffset === null || focusOffset === null) return null;
-
-	return {
-		start: Math.min(anchorOffset, focusOffset),
-		end: Math.max(anchorOffset, focusOffset),
-	};
-}
-
-function getDomPointOffsetInBlock(
-	blockElement: HTMLElement,
-	node: Node,
-	offset: number,
-) {
-	const range = document.createRange();
-	range.selectNodeContents(blockElement);
-
-	try {
-		range.setEnd(node, offset);
-		const contentLength = blockElement.textContent?.length ?? 0;
-		return Math.max(0, Math.min(range.toString().length, contentLength));
-	} catch {
-		return null;
-	}
 }

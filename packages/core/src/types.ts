@@ -21,5 +21,18 @@ export const EDITOR_STATE_SCHEMA_VERSION = 1;
 export type EditorState = {
 	schemaVersion: typeof EDITOR_STATE_SCHEMA_VERSION;
 	blocks: Block[];
+};
+
+export type EditorRuntimeState = {
 	selection: EditorSelection | null;
+};
+
+export type EditorSnapshot = {
+	state: EditorState;
+	runtime: EditorRuntimeState;
+};
+
+export type EditorChange = {
+	stateChanged: boolean;
+	selectionChanged: boolean;
 };
