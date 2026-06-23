@@ -2,6 +2,7 @@ import type { BlockType, EditorSelection, EditorState } from "@miniblock/core";
 import {
 	type CSSProperties,
 	useCallback,
+	useEffect,
 	useLayoutEffect,
 	useRef,
 	useState,
@@ -111,16 +112,6 @@ export function BlockEditor({
 	const syncSelectionFromDom = useCallback(() => {
 		setSelection(readSelectionFromDom(blocksRef.current));
 	}, [setSelection]);
-
-	const importSelectionForCommand = useCallback(() => {
-		const importedSelection = readSelectionFromDom(blocksRef.current);
-		if (importedSelection) {
-			editor.setSelection(importedSelection, { emit: false });
-			return importedSelection;
-		}
-
-		return editor.getSelection();
-	}, [editor]);
 
 	const updateSlashMenu = useCallback(
 		(blockId: string, content: string, element: HTMLElement) => {
@@ -305,7 +296,6 @@ export function BlockEditor({
 			const blockId = blockElement.dataset.blockId;
 			if (!blockId) return;
 
-			importSelectionForCommand();
 			const selection = window.getSelection();
 
 			if (event.inputType === "historyUndo") {
@@ -376,7 +366,7 @@ export function BlockEditor({
 				});
 			}
 		},
-		[editor, handleInputIntent, importSelectionForCommand, readOnly],
+		[editor, handleInputIntent, readOnly],
 	);
 
 	const handleCompositionStart = useCallback(() => {
@@ -399,18 +389,6 @@ export function BlockEditor({
 			syncSelectionFromDom();
 		},
 		[commitBlockContent, readOnly, syncSelectionFromDom],
-	);
-
-	const handleMouseUp = useCallback(() => {
-		syncSelectionFromDom();
-	}, [syncSelectionFromDom]);
-
-	const handleKeyUp = useCallback(
-		(event: React.KeyboardEvent<HTMLDivElement>) => {
-			if (isComposingRef.current || event.nativeEvent.isComposing) return;
-			syncSelectionFromDom();
-		},
-		[syncSelectionFromDom],
 	);
 
 	const handleInput = useCallback(
@@ -513,7 +491,6 @@ export function BlockEditor({
 				if (isBeforeInputSupported()) return;
 				event.preventDefault();
 
-				importSelectionForCommand();
 				const offset =
 					getCollapsedOffsetInBlock(blockElement, window.getSelection()) ?? 0;
 
@@ -523,7 +500,6 @@ export function BlockEditor({
 
 			if (event.key === "Backspace") {
 				if (isBeforeInputSupported()) return;
-				importSelectionForCommand();
 				const range = getSelectionRangeInBlock(
 					blockElement,
 					window.getSelection(),
@@ -541,7 +517,6 @@ export function BlockEditor({
 
 			if (event.key === "ArrowUp" || event.key === "ArrowDown") {
 				event.preventDefault();
-				importSelectionForCommand();
 
 				const index = blocks.findIndex((item) => item.id === blockId);
 
@@ -565,7 +540,6 @@ export function BlockEditor({
 			slashMenu,
 			editor,
 			selectSlashItem,
-			importSelectionForCommand,
 			splitBlock,
 			deleteBlockBackward,
 			mergeBlockBackward,
@@ -608,6 +582,23 @@ export function BlockEditor({
 		};
 	}, []);
 
+	useEffect(() => {
+		if (readOnly) return;
+
+		const handleSelectionChange = () => {
+			if (isComposingRef.current) return;
+			const selection = window.getSelection();
+			if (selection && editorRootRef.current?.contains(selection.anchorNode)) {
+				syncSelectionFromDom();
+			}
+		};
+
+		document.addEventListener("selectionchange", handleSelectionChange);
+		return () => {
+			document.removeEventListener("selectionchange", handleSelectionChange);
+		};
+	}, [readOnly, syncSelectionFromDom]);
+
 	return (
 		<div
 			className={["mb-editor", className].filter(Boolean).join(" ")}
@@ -619,8 +610,6 @@ export function BlockEditor({
 				className="mb-editor__page"
 				onCompositionStart={handleCompositionStart}
 				onCompositionEnd={handleCompositionEnd}
-				onMouseUp={handleMouseUp}
-				onKeyUp={handleKeyUp}
 				onInput={handleInput}
 				onKeyDown={handleKeyDown}
 			>
