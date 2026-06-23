@@ -12,6 +12,7 @@ import {
 	getCaretOffsetWithinBlock,
 	getCollapsedOffsetInBlock,
 	getSelectionRangeInBlock,
+	isSelectionEqual,
 	readSelectionFromDom,
 	type TextRange,
 } from "./dom-selection";
@@ -56,11 +57,7 @@ export type BlockEditorProps = {
 	value?: EditorState;
 	defaultValue?: EditorState;
 	onChange?: (state: EditorState) => void;
-	selection?: EditorSelection | null;
-	defaultSelection?: EditorSelection | null;
-	onSelectionChange?: (selection: EditorSelection | null) => void;
 	readOnly?: string;
-	autoFocus?: boolean;
 	placeholder?: string;
 	className?: string;
 	style?: CSSProperties;
@@ -70,10 +67,6 @@ export function BlockEditor({
 	onChange,
 	defaultValue,
 	value,
-	selection: controlledSelection,
-	defaultSelection,
-	onSelectionChange,
-	autoFocus = true,
 	className,
 	placeholder,
 	readOnly,
@@ -93,36 +86,31 @@ export function BlockEditor({
 		onChange,
 		defaultValue,
 		value,
-		selection: controlledSelection,
-		defaultSelection,
-		onSelectionChange,
 	});
 
 	const editorRootRef = useRef<HTMLDivElement | null>(null);
 	const blocksRef = useRef(new Map<string, HTMLElement>());
 	const isComposingRef = useRef(false);
-	const pendingApplySelectionRef = useRef(false);
+	const prevSelectionRef = useRef<EditorSelection | null>(null);
 	const beforeInputHandlerRef = useRef<(event: InputEvent) => void>(() => {});
 	const [slashMenu, setSlashMenu] = useState<SlashMenuState | null>(null);
 
-	const markApplyNeeded = useCallback(() => {
-		pendingApplySelectionRef.current = true;
-	}, []);
+	const selectSlashItem = useCallback(
+		(type: BlockType) => {
+			if (!slashMenu) return;
+			const element = blocksRef.current.get(slashMenu.blockId);
+			const content = element?.textContent ?? "";
+			const nextContent = content === "/" ? "" : content.replace(/ \/$/, "");
 
-	const selectSlashItem = (type: BlockType) => {
-		if (!slashMenu) return;
-		const element = blocksRef.current.get(slashMenu.blockId);
-		const content = element?.textContent ?? "";
-		const nextContent = content === "/" ? "" : content.replace(/ \/$/, "");
+			changeBlockType(slashMenu.blockId, type, nextContent);
+			setSlashMenu(null);
+		},
+		[slashMenu, changeBlockType],
+	);
 
-		markApplyNeeded();
-		changeBlockType(slashMenu.blockId, type, nextContent);
-		setSlashMenu(null);
-	};
-
-	const syncSelectionFromDom = () => {
+	const syncSelectionFromDom = useCallback(() => {
 		setSelection(readSelectionFromDom(blocksRef.current));
-	};
+	}, [setSelection]);
 
 	const importSelectionForCommand = useCallback(() => {
 		const importedSelection = readSelectionFromDom(blocksRef.current);
@@ -152,12 +140,10 @@ export function BlockEditor({
 		[],
 	);
 
-	// commit helper. commit: confirm editor state update
 	const commitBlockContent = useCallback(
 		(blockId: string, content: string, element: HTMLElement) => {
 			const shortcut = matchTextShortcut(content);
 			if (shortcut) {
-				markApplyNeeded();
 				changeBlockType(blockId, shortcut.type, "");
 				// TODO:
 				// maybe we can call like
@@ -168,7 +154,7 @@ export function BlockEditor({
 			updateBlock(blockId, { content });
 			updateSlashMenu(blockId, content, element);
 		},
-		[changeBlockType, markApplyNeeded, updateBlock, updateSlashMenu],
+		[changeBlockType, updateBlock, updateSlashMenu],
 	);
 
 	const handleInputIntent = useCallback(
@@ -179,7 +165,6 @@ export function BlockEditor({
 
 			// insertText
 			if (command.type === "insertText") {
-				markApplyNeeded();
 				const nextContent = insertTextAt(
 					block.content,
 					command.offset,
@@ -207,12 +192,10 @@ export function BlockEditor({
 			}
 
 			if (command.type === "splitBlock") {
-				markApplyNeeded();
 				splitBlock(command.blockId, command.offset);
 			}
 
 			if (command.type === "deleteBackward") {
-				markApplyNeeded();
 				const { start, end } = command.range;
 				// Range Deletion
 				if (start !== end) {
@@ -258,7 +241,6 @@ export function BlockEditor({
 			}
 
 			if (command.type === "deleteForward") {
-				markApplyNeeded();
 				const { start, end } = command.range;
 
 				if (start !== end) {
@@ -304,7 +286,6 @@ export function BlockEditor({
 		[
 			changeBlockType,
 			editor,
-			markApplyNeeded,
 			splitBlock,
 			deleteBlockBackward,
 			mergeBlockBackward,
@@ -329,14 +310,12 @@ export function BlockEditor({
 
 			if (event.inputType === "historyUndo") {
 				event.preventDefault();
-				markApplyNeeded();
 				editor.undo();
 				return;
 			}
 
 			if (event.inputType === "historyRedo") {
 				event.preventDefault();
-				markApplyNeeded();
 				editor.redo();
 				return;
 			}
@@ -397,12 +376,201 @@ export function BlockEditor({
 				});
 			}
 		},
+		[editor, handleInputIntent, importSelectionForCommand, readOnly],
+	);
+
+	const handleCompositionStart = useCallback(() => {
+		isComposingRef.current = true;
+	}, []);
+
+	const handleCompositionEnd = useCallback(
+		(event: React.CompositionEvent<HTMLDivElement>) => {
+			isComposingRef.current = false;
+			if (readOnly) return;
+
+			const blockElement = findClosestBlockElement(event.target);
+			if (!blockElement) return;
+
+			const blockId = blockElement.dataset.blockId;
+			if (!blockId) return;
+
+			const content = blockElement.textContent ?? "";
+			commitBlockContent(blockId, content, blockElement);
+			syncSelectionFromDom();
+		},
+		[commitBlockContent, readOnly, syncSelectionFromDom],
+	);
+
+	const handleMouseUp = useCallback(() => {
+		syncSelectionFromDom();
+	}, [syncSelectionFromDom]);
+
+	const handleKeyUp = useCallback(
+		(event: React.KeyboardEvent<HTMLDivElement>) => {
+			if (isComposingRef.current || event.nativeEvent.isComposing) return;
+			syncSelectionFromDom();
+		},
+		[syncSelectionFromDom],
+	);
+
+	const handleInput = useCallback(
+		(event: React.SyntheticEvent<HTMLDivElement>) => {
+			if (readOnly) return;
+			if (
+				isComposingRef.current ||
+				(event.nativeEvent as unknown as { isComposing?: boolean }).isComposing
+			)
+				return;
+
+			const blockElement = findClosestBlockElement(event.target);
+			if (!blockElement) return;
+
+			const blockId = blockElement.dataset.blockId;
+			if (!blockId) return;
+
+			const content = blockElement.textContent ?? "";
+			commitBlockContent(blockId, content, blockElement);
+			syncSelectionFromDom();
+		},
+		[commitBlockContent, readOnly, syncSelectionFromDom],
+	);
+
+	const handleKeyDown = useCallback(
+		(event: React.KeyboardEvent<HTMLDivElement>) => {
+			if (readOnly) return;
+			if (isComposingRef.current || event.nativeEvent.isComposing) return;
+
+			const blockElement = findClosestBlockElement(event.target);
+			if (!blockElement) return;
+
+			const blockId = blockElement.dataset.blockId;
+			if (!blockId) return;
+
+			const key = event.key.toLowerCase();
+			const isModifierKey = event.metaKey || event.ctrlKey;
+			const isUndoKey = isModifierKey && key === "z" && !event.shiftKey;
+			const isRedoKey =
+				isModifierKey && ((key === "z" && event.shiftKey) || key === "y");
+
+			if (isUndoKey) {
+				event.preventDefault();
+				editor.undo();
+				return;
+			}
+
+			if (isRedoKey) {
+				event.preventDefault();
+				editor.redo();
+				return;
+			}
+
+			if (slashMenu?.blockId === blockId) {
+				if (event.key === "ArrowDown") {
+					event.preventDefault();
+
+					setSlashMenu((menu) =>
+						menu
+							? {
+									...menu,
+									activeIndex: (menu.activeIndex + 1) % blockCommands.length,
+								}
+							: menu,
+					);
+					return;
+				}
+
+				if (event.key === "ArrowUp") {
+					event.preventDefault();
+
+					setSlashMenu((menu) =>
+						menu
+							? {
+									...menu,
+									activeIndex:
+										(menu.activeIndex - 1 + blockCommands.length) %
+										blockCommands.length,
+								}
+							: menu,
+					);
+					return;
+				}
+
+				if (event.key === "Enter") {
+					event.preventDefault();
+					const item = blockCommands[slashMenu.activeIndex];
+					selectSlashItem(item.type);
+					return;
+				}
+
+				if (event.key === "Escape") {
+					event.preventDefault();
+					setSlashMenu(null);
+					return;
+				}
+			}
+
+			if (event.key === "Enter") {
+				if (isBeforeInputSupported()) return;
+				event.preventDefault();
+
+				importSelectionForCommand();
+				const offset =
+					getCollapsedOffsetInBlock(blockElement, window.getSelection()) ?? 0;
+
+				splitBlock(blockId, offset);
+				return;
+			}
+
+			if (event.key === "Backspace") {
+				if (isBeforeInputSupported()) return;
+				importSelectionForCommand();
+				const range = getSelectionRangeInBlock(
+					blockElement,
+					window.getSelection(),
+				);
+				const isAtStart = range?.start === 0 && range.end === 0;
+				if (!isAtStart) return;
+				event.preventDefault();
+
+				const isEmpty = (blockElement.textContent ?? "") === "";
+
+				isEmpty ? deleteBlockBackward(blockId) : mergeBlockBackward(blockId);
+
+				return;
+			}
+
+			if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+				event.preventDefault();
+				importSelectionForCommand();
+
+				const index = blocks.findIndex((item) => item.id === blockId);
+
+				if (index === -1) return;
+				const idxCandidate = event.key === "ArrowUp" ? index - 1 : index + 1;
+				// Handle Out of Bound.
+				const nextIdx = Math.max(0, Math.min(idxCandidate, blocks.length - 1));
+				const nextBlock = blocks[nextIdx];
+				if (!nextBlock) return;
+				// Calculate offset
+				const offset = getCaretOffsetWithinBlock(blockElement);
+				// Move caret to next block.
+				setSelection({
+					anchor: { blockId: nextBlock.id, offset },
+					focus: { blockId: nextBlock.id, offset },
+				});
+			}
+		},
 		[
-			editor,
-			handleInputIntent,
-			importSelectionForCommand,
-			markApplyNeeded,
 			readOnly,
+			slashMenu,
+			editor,
+			selectSlashItem,
+			importSelectionForCommand,
+			splitBlock,
+			deleteBlockBackward,
+			mergeBlockBackward,
+			blocks,
+			setSelection,
 		],
 	);
 
@@ -411,33 +579,19 @@ export function BlockEditor({
 	}, [handleNativeBeforeInput]);
 
 	useLayoutEffect(() => {
-		if (!pendingApplySelectionRef.current) return;
-		pendingApplySelectionRef.current = false;
-		applySelectionToDom(blocksRef.current, editor.getSelection());
-	});
+		if (isComposingRef.current || !selection) {
+			prevSelectionRef.current = selection;
+			return;
+		}
 
-	useLayoutEffect(() => {
-		if (controlledSelection === undefined) return;
-		applySelectionToDom(blocksRef.current, controlledSelection);
-	}, [controlledSelection]);
+		const currentDomSelection = readSelectionFromDom(blocksRef.current);
+		if (!isSelectionEqual(currentDomSelection, selection)) {
+			applySelectionToDom(blocksRef.current, selection);
+		}
 
-	const firstBlockId = blocks[0]?.id;
-	useLayoutEffect(() => {
-		if (!autoFocus || !firstBlockId || selection || readOnly) return;
-
-		markApplyNeeded();
-		setSelection({
-			anchor: { blockId: firstBlockId, offset: 0 },
-			focus: { blockId: firstBlockId, offset: 0 },
-		});
-	}, [
-		autoFocus,
-		firstBlockId,
-		markApplyNeeded,
-		selection,
-		readOnly,
-		setSelection,
-	]);
+		prevSelectionRef.current = selection;
+	}, [selection]);
+	// core selection이 바뀌면 DOM selection을 반영한다
 
 	useLayoutEffect(() => {
 		const root = editorRootRef.current;
@@ -459,7 +613,17 @@ export function BlockEditor({
 			className={["mb-editor", className].filter(Boolean).join(" ")}
 			style={style}
 		>
-			<div ref={editorRootRef} className="mb-editor__page">
+			{/* biome-ignore lint/a11y/noStaticElementInteractions: delegated event handler container */}
+			<div
+				ref={editorRootRef}
+				className="mb-editor__page"
+				onCompositionStart={handleCompositionStart}
+				onCompositionEnd={handleCompositionEnd}
+				onMouseUp={handleMouseUp}
+				onKeyUp={handleKeyUp}
+				onInput={handleInput}
+				onKeyDown={handleKeyDown}
+			>
 				{blocks.map((block) => {
 					const Block = block.type as BlockType;
 					const showPlaceholder =
@@ -487,170 +651,6 @@ export function BlockEditor({
 									}
 								} else {
 									blocksRef.current.delete(block.id);
-								}
-							}}
-							onCompositionStart={() => {
-								isComposingRef.current = true;
-							}}
-							onCompositionEnd={(event) => {
-								isComposingRef.current = false;
-								if (readOnly) return;
-								const content = event.currentTarget.textContent ?? "";
-								commitBlockContent(block.id, content, event.currentTarget);
-								syncSelectionFromDom();
-							}}
-							onMouseUp={syncSelectionFromDom}
-							onKeyUp={(e) => {
-								if (isComposingRef.current || e.nativeEvent.isComposing) return;
-								syncSelectionFromDom();
-							}}
-							onInput={(event) => {
-								if (readOnly) return;
-								if (isComposingRef.current || event.nativeEvent.isComposing)
-									return;
-
-								const content = event.currentTarget.textContent ?? "";
-								commitBlockContent(block.id, content, event.currentTarget);
-								syncSelectionFromDom();
-							}}
-							onKeyDown={(event) => {
-								if (readOnly) return;
-								if (isComposingRef.current || event.nativeEvent.isComposing)
-									return;
-
-								const key = event.key.toLowerCase();
-								const isModifierKey = event.metaKey || event.ctrlKey;
-								const isUndoKey =
-									isModifierKey && key === "z" && !event.shiftKey;
-								const isRedoKey =
-									isModifierKey &&
-									((key === "z" && event.shiftKey) || key === "y");
-
-								if (isUndoKey) {
-									event.preventDefault();
-									markApplyNeeded();
-									editor.undo();
-									return;
-								}
-
-								if (isRedoKey) {
-									event.preventDefault();
-									markApplyNeeded();
-									editor.redo();
-									return;
-								}
-
-								if (slashMenu?.blockId === block.id) {
-									if (event.key === "ArrowDown") {
-										event.preventDefault();
-
-										setSlashMenu((menu) =>
-											menu
-												? {
-														...menu,
-														activeIndex:
-															(menu.activeIndex + 1) % blockCommands.length,
-													}
-												: menu,
-										);
-										return;
-									}
-
-									if (event.key === "ArrowUp") {
-										event.preventDefault();
-
-										setSlashMenu((menu) =>
-											menu
-												? {
-														...menu,
-														activeIndex:
-															(menu.activeIndex - 1 + blockCommands.length) %
-															blockCommands.length,
-													}
-												: menu,
-										);
-										return;
-									}
-
-									if (event.key === "Enter") {
-										event.preventDefault();
-										const item = blockCommands[slashMenu.activeIndex];
-										selectSlashItem(item.type);
-										return;
-									}
-
-									if (event.key === "Escape") {
-										event.preventDefault();
-										setSlashMenu(null);
-										return;
-									}
-								}
-
-								if (event.key === "Enter") {
-									if (isBeforeInputSupported()) return;
-									event.preventDefault();
-
-									importSelectionForCommand();
-									const offset =
-										getCollapsedOffsetInBlock(
-											event.currentTarget,
-											window.getSelection(),
-										) ?? 0;
-
-									markApplyNeeded();
-									splitBlock(block.id, offset);
-									return;
-								}
-
-								if (event.key === "Backspace") {
-									if (isBeforeInputSupported()) return;
-									importSelectionForCommand();
-									const range = getSelectionRangeInBlock(
-										event.currentTarget,
-										window.getSelection(),
-									);
-									const isAtStart = range?.start === 0 && range.end === 0;
-									if (!isAtStart) return;
-									event.preventDefault();
-
-									const isEmpty =
-										(event.currentTarget.textContent ?? "") === "";
-
-									markApplyNeeded();
-									isEmpty
-										? deleteBlockBackward(block.id)
-										: mergeBlockBackward(block.id);
-
-									return;
-								}
-
-								if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-									event.preventDefault();
-									importSelectionForCommand();
-
-									const index = blocks.findIndex(
-										(item) => item.id === block.id,
-									);
-
-									// Remove block ? or sync
-									if (index === -1) return;
-									const idxCandidate =
-										event.key === "ArrowUp" ? index - 1 : index + 1;
-									// Handle Out of Bound.
-									const nextIdx = Math.max(
-										0,
-										Math.min(idxCandidate, blocks.length - 1),
-									);
-									const nextBlock = blocks[nextIdx];
-									if (!nextBlock) return;
-									// TODO: 블록 기준으로 텍스트의 몇번째 offset인지 계산해서 이동해야함.
-									const offset = getCaretOffsetWithinBlock(event.currentTarget);
-									// Move caret to next block.
-									markApplyNeeded();
-									setSelection({
-										anchor: { blockId: nextBlock.id, offset },
-										focus: { blockId: nextBlock.id, offset },
-									});
 								}
 							}}
 						/>

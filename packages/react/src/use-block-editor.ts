@@ -1,8 +1,4 @@
-import {
-	type EditorSelection,
-	type EditorState,
-	MiniBlockCore,
-} from "@miniblock/core";
+import { type EditorState, MiniBlockCore } from "@miniblock/core";
 import {
 	useEffect,
 	useLayoutEffect,
@@ -13,20 +9,15 @@ import {
 export type UseBlockEditorOptions = {
 	value?: EditorState;
 	defaultValue?: EditorState;
-	selection?: EditorSelection | null;
-	defaultSelection?: EditorSelection | null;
 	onChange?: (state: EditorState) => void;
-	onSelectionChange?: (selection: EditorSelection | null) => void;
 };
 
 export function useBlockEditor(options: UseBlockEditorOptions) {
 	const isControlled = options.value !== undefined;
-	const isSelectionControlled = options.selection !== undefined;
 	const editorRef = useRef<MiniBlockCore | null>(null);
 	if (!editorRef.current) {
 		editorRef.current = new MiniBlockCore(
 			options.value ?? options.defaultValue,
-			options.selection ?? options.defaultSelection,
 		);
 	}
 
@@ -39,30 +30,20 @@ export function useBlockEditor(options: UseBlockEditorOptions) {
 	);
 
 	const state = options.value ?? storedSnapshot.state;
-	const selection = isSelectionControlled
-		? (options.selection ?? null)
-		: storedSnapshot.runtime.selection;
+	const selection = storedSnapshot.runtime.selection;
 
 	useLayoutEffect(() => {
 		if (!isControlled || !options.value) return;
 		editor.setState(options.value, { emit: false });
 	}, [isControlled, options.value, editor]);
 
-	useLayoutEffect(() => {
-		if (!isSelectionControlled) return;
-		editor.setSelection(options.selection ?? null, { emit: false });
-	}, [isSelectionControlled, options.selection, editor]);
-
 	useEffect(() => {
 		return editor.subscribe((snapshot, change) => {
 			if (change.stateChanged) {
 				options.onChange?.(snapshot.state);
 			}
-			if (change.selectionChanged) {
-				options.onSelectionChange?.(snapshot.runtime.selection);
-			}
 		});
-	}, [options.onChange, options.onSelectionChange, editor]);
+	}, [options.onChange, editor]);
 
 	return {
 		editor,
