@@ -6,13 +6,11 @@ export type CommandResult = {
 	inverse: EditorCommand | null;
 };
 
-export interface CommandHandler<C extends EditorCommand = EditorCommand> {
-	apply(
-		state: EditorState,
-		selection: EditorSelection | null,
-		command: C,
-	): CommandResult;
-}
+export type CommandHandler<C extends EditorCommand = EditorCommand> = (
+	state: EditorState,
+	selection: EditorSelection | null,
+	command: C,
+) => CommandResult;
 
 export type HistoryPolicy = "record" | "skip" | "merge";
 
