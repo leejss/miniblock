@@ -1,4 +1,18 @@
-import type { Block, BlockType, EditorSelection } from "./types";
+import type { Block, BlockType, EditorSelection, EditorState } from "./types";
+
+export type CommandResult = {
+	state: EditorState;
+	selection: EditorSelection | null;
+	inverse: EditorCommand | null;
+};
+
+export interface CommandHandler<C extends EditorCommand = EditorCommand> {
+	apply(
+		state: EditorState,
+		selection: EditorSelection | null,
+		command: C,
+	): CommandResult;
+}
 
 export type HistoryPolicy = "record" | "skip" | "merge";
 
