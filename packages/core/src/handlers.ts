@@ -1,4 +1,4 @@
-import type { CommandHandler, CommandResult, EditorCommand } from "./commands";
+import type { CommandHandler, CommandResult } from "./commands";
 import { createCollapsedSelection, normalizeSelection } from "./selection";
 import {
 	changeBlockTypeState,
@@ -21,15 +21,17 @@ function unchanged(
 	};
 }
 
-export const updateBlockHandler: CommandHandler<
-	Extract<EditorCommand, { type: "updateBlock" }>
-> = (state, selection, command) => {
-	const index = state.blocks.findIndex((block) => block.id === command.id);
+export const updateBlockHandler: CommandHandler<"updateBlock"> = (
+	state,
+	selection,
+	payload,
+) => {
+	const index = state.blocks.findIndex((block) => block.id === payload.id);
 	if (index === -1) return unchanged(state, selection);
 
 	const previousBlock = state.blocks[index];
 	const blocks = state.blocks.map((block) =>
-		block.id === command.id ? { ...block, ...command.patch } : block,
+		block.id === payload.id ? { ...block, ...payload.patch } : block,
 	);
 	const nextState = { ...state, blocks };
 
@@ -38,55 +40,63 @@ export const updateBlockHandler: CommandHandler<
 		selection: normalizeSelection(blocks, selection),
 		inverse: {
 			type: "replaceBlocks",
-			start: index,
-			deleteCount: 1,
-			blocks: [previousBlock],
-			selection,
+			payload: {
+				start: index,
+				deleteCount: 1,
+				blocks: [previousBlock],
+				selection,
+			},
 		},
 	};
 };
 
-export const splitBlockHandler: CommandHandler<
-	Extract<EditorCommand, { type: "splitBlock" }>
-> = (state, selection, command) => {
-	const index = state.blocks.findIndex((block) => block.id === command.blockId);
+export const splitBlockHandler: CommandHandler<"splitBlock"> = (
+	state,
+	selection,
+	payload,
+) => {
+	const index = state.blocks.findIndex((block) => block.id === payload.blockId);
 	if (index === -1) return unchanged(state, selection);
 
 	const previousBlock = state.blocks[index];
 	const block = state.blocks[index];
-	const offset = Math.max(0, Math.min(command.offset, block.content.length));
+	const offset = Math.max(0, Math.min(payload.offset, block.content.length));
 	const nextState = splitBlockState(state, {
-		blockId: command.blockId,
+		blockId: payload.blockId,
 		offset,
-		newBlockId: command.newBlockId,
+		newBlockId: payload.newBlockId,
 	});
 
 	if (nextState === state) return unchanged(state, selection);
 
 	return {
 		state: nextState,
-		selection: createCollapsedSelection(command.newBlockId),
+		selection: createCollapsedSelection(payload.newBlockId),
 		inverse: {
 			type: "replaceBlocks",
-			start: index,
-			deleteCount: 2,
-			blocks: [previousBlock],
-			selection,
+			payload: {
+				start: index,
+				deleteCount: 2,
+				blocks: [previousBlock],
+				selection,
+			},
 		},
 	};
 };
 
-export const mergeBlockBackwardHandler: CommandHandler<
-	Extract<EditorCommand, { type: "mergeBlockBackward" }>
-> = (state, selection, command) => {
-	const index = state.blocks.findIndex((block) => block.id === command.blockId);
+export const mergeBlockBackwardHandler: CommandHandler<"mergeBlockBackward"> = (
+	state,
+	selection,
+	payload,
+) => {
+	const index = state.blocks.findIndex((block) => block.id === payload.blockId);
 	if (index <= 0) return unchanged(state, selection);
 
 	const previousBlock = state.blocks[index - 1];
 	const currentBlock = state.blocks[index];
 	const offset = previousBlock.content.length;
 	const nextState = mergeBlockBackwardState(state, {
-		blockId: command.blockId,
+		blockId: payload.blockId,
 	});
 
 	if (nextState === state) return unchanged(state, selection);
@@ -96,25 +106,27 @@ export const mergeBlockBackwardHandler: CommandHandler<
 		selection: createCollapsedSelection(previousBlock.id, offset),
 		inverse: {
 			type: "replaceBlocks",
-			start: index - 1,
-			deleteCount: 1,
-			blocks: [previousBlock, currentBlock],
-			selection,
+			payload: {
+				start: index - 1,
+				deleteCount: 1,
+				blocks: [previousBlock, currentBlock],
+				selection,
+			},
 		},
 	};
 };
 
 export const deleteBlockBackwardHandler: CommandHandler<
-	Extract<EditorCommand, { type: "deleteBlockBackward" }>
-> = (state, selection, command) => {
-	const index = state.blocks.findIndex((block) => block.id === command.blockId);
+	"deleteBlockBackward"
+> = (state, selection, payload) => {
+	const index = state.blocks.findIndex((block) => block.id === payload.blockId);
 	if (index <= 0) return unchanged(state, selection);
 
 	const previousBlock = state.blocks[index - 1];
 	const deletedBlock = state.blocks[index];
 	const offset = previousBlock.content.length;
 	const nextState = deleteBlockBackwardState(state, {
-		blockId: command.blockId,
+		blockId: payload.blockId,
 	});
 
 	if (nextState === state) return unchanged(state, selection);
@@ -124,56 +136,64 @@ export const deleteBlockBackwardHandler: CommandHandler<
 		selection: createCollapsedSelection(previousBlock.id, offset),
 		inverse: {
 			type: "replaceBlocks",
-			start: index,
-			deleteCount: 0,
-			blocks: [deletedBlock],
-			selection,
+			payload: {
+				start: index,
+				deleteCount: 0,
+				blocks: [deletedBlock],
+				selection,
+			},
 		},
 	};
 };
 
-export const changeBlockTypeHandler: CommandHandler<
-	Extract<EditorCommand, { type: "changeBlockType" }>
-> = (state, selection, command) => {
-	const index = state.blocks.findIndex((block) => block.id === command.blockId);
+export const changeBlockTypeHandler: CommandHandler<"changeBlockType"> = (
+	state,
+	selection,
+	payload,
+) => {
+	const index = state.blocks.findIndex((block) => block.id === payload.blockId);
 	if (index === -1) return unchanged(state, selection);
 
 	const previousBlock = state.blocks[index];
-	const content = command.newContent ?? previousBlock.content;
+	const content = payload.newContent ?? previousBlock.content;
 	const nextState = changeBlockTypeState(state, {
-		blockId: command.blockId,
-		type: command.blockType,
-		newContent: command.newContent,
+		blockId: payload.blockId,
+		type: payload.blockType,
+		newContent: payload.newContent,
 	});
 
 	if (nextState === state) return unchanged(state, selection);
 
 	return {
 		state: nextState,
-		selection: createCollapsedSelection(command.blockId, content.length),
+		selection: createCollapsedSelection(payload.blockId, content.length),
 		inverse: {
 			type: "replaceBlocks",
-			start: index,
-			deleteCount: 1,
-			blocks: [previousBlock],
-			selection,
+			payload: {
+				start: index,
+				deleteCount: 1,
+				blocks: [previousBlock],
+				selection,
+			},
 		},
 	};
 };
 
-export const insertTextHandler: CommandHandler<
-	Extract<EditorCommand, { type: "insertText" }>
-> = (state, selection, command) => {
-	if (command.text.length === 0) return unchanged(state, selection);
+export const insertTextHandler: CommandHandler<"insertText"> = (
+	state,
+	selection,
+	payload,
+) => {
+	if (payload.text.length === 0) return unchanged(state, selection);
 
-	const block = state.blocks.find((block) => block.id === command.blockId);
+	const block = state.blocks.find((block) => block.id === payload.blockId);
 	if (!block) return unchanged(state, selection);
 
-	const offset = Math.max(0, Math.min(command.offset, block.content.length));
+	const offset = Math.max(0, Math.min(payload.offset, block.content.length));
 	const nextState = insertTextState(state, {
-		blockId: command.blockId,
+		blockId: payload.blockId,
 		offset,
-		text: command.text,
+		text: payload.text,
 	});
 
 	if (nextState === state) return unchanged(state, selection);
@@ -181,31 +201,35 @@ export const insertTextHandler: CommandHandler<
 	return {
 		state: nextState,
 		selection: createCollapsedSelection(
-			command.blockId,
-			offset + command.text.length,
+			payload.blockId,
+			offset + payload.text.length,
 		),
 		inverse: {
 			type: "deleteText",
-			blockId: command.blockId,
-			start: offset,
-			end: offset + command.text.length,
+			payload: {
+				blockId: payload.blockId,
+				start: offset,
+				end: offset + payload.text.length,
+			},
 		},
 	};
 };
 
-export const deleteTextHandler: CommandHandler<
-	Extract<EditorCommand, { type: "deleteText" }>
-> = (state, selection, command) => {
-	const block = state.blocks.find((block) => block.id === command.blockId);
+export const deleteTextHandler: CommandHandler<"deleteText"> = (
+	state,
+	selection,
+	payload,
+) => {
+	const block = state.blocks.find((block) => block.id === payload.blockId);
 	if (!block) return unchanged(state, selection);
 
-	const start = Math.max(0, Math.min(command.start, block.content.length));
-	const end = Math.max(start, Math.min(command.end, block.content.length));
+	const start = Math.max(0, Math.min(payload.start, block.content.length));
+	const end = Math.max(start, Math.min(payload.end, block.content.length));
 	if (start === end) return unchanged(state, selection);
 
 	const deletedText = block.content.slice(start, end);
 	const nextState = deleteTextState(state, {
-		blockId: command.blockId,
+		blockId: payload.blockId,
 		start,
 		end,
 	});
@@ -214,28 +238,32 @@ export const deleteTextHandler: CommandHandler<
 
 	return {
 		state: nextState,
-		selection: createCollapsedSelection(command.blockId, start),
+		selection: createCollapsedSelection(payload.blockId, start),
 		inverse: {
 			type: "insertText",
-			blockId: command.blockId,
-			offset: start,
-			text: deletedText,
+			payload: {
+				blockId: payload.blockId,
+				offset: start,
+				text: deletedText,
+			},
 		},
 	};
 };
 
-export const replaceBlocksHandler: CommandHandler<
-	Extract<EditorCommand, { type: "replaceBlocks" }>
-> = (state, selection, command) => {
-	const start = Math.max(0, Math.min(command.start, state.blocks.length));
+export const replaceBlocksHandler: CommandHandler<"replaceBlocks"> = (
+	state,
+	selection,
+	payload,
+) => {
+	const start = Math.max(0, Math.min(payload.start, state.blocks.length));
 	const deleteCount = Math.max(
 		0,
-		Math.min(command.deleteCount, state.blocks.length - start),
+		Math.min(payload.deleteCount, state.blocks.length - start),
 	);
 	const removedBlocks = state.blocks.slice(start, start + deleteCount);
 	const blocks = [
 		...state.blocks.slice(0, start),
-		...command.blocks,
+		...payload.blocks,
 		...state.blocks.slice(start + deleteCount),
 	];
 
@@ -246,13 +274,15 @@ export const replaceBlocksHandler: CommandHandler<
 			...state,
 			blocks,
 		},
-		selection: normalizeSelection(blocks, command.selection),
+		selection: normalizeSelection(blocks, payload.selection),
 		inverse: {
 			type: "replaceBlocks",
-			start,
-			deleteCount: command.blocks.length,
-			blocks: removedBlocks,
-			selection,
+			payload: {
+				start,
+				deleteCount: payload.blocks.length,
+				blocks: removedBlocks,
+				selection,
+			},
 		},
 	};
 };

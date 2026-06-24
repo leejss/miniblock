@@ -158,9 +158,11 @@ export function BlockEditor({
 				editor.dispatch(
 					{
 						type: "insertText",
-						blockId: command.blockId,
-						offset: command.offset,
-						text: command.text,
+						payload: {
+							blockId: command.blockId,
+							offset: command.offset,
+							text: command.text,
+						},
 					},
 					{ history: "merge" },
 				);
@@ -180,9 +182,11 @@ export function BlockEditor({
 					editor.dispatch(
 						{
 							type: "deleteText",
-							blockId: command.blockId,
-							start,
-							end,
+							payload: {
+								blockId: command.blockId,
+								start,
+								end,
+							},
 						},
 						{ history: "merge" },
 					);
@@ -197,9 +201,11 @@ export function BlockEditor({
 					editor.dispatch(
 						{
 							type: "deleteText",
-							blockId: command.blockId,
-							start: nextOffset,
-							end: start,
+							payload: {
+								blockId: command.blockId,
+								start: nextOffset,
+								end: start,
+							},
 						},
 						{ history: "merge" },
 					);
@@ -225,9 +231,11 @@ export function BlockEditor({
 					editor.dispatch(
 						{
 							type: "deleteText",
-							blockId: command.blockId,
-							start,
-							end,
+							payload: {
+								blockId: command.blockId,
+								start,
+								end,
+							},
 						},
 						{ history: "merge" },
 					);
@@ -240,9 +248,11 @@ export function BlockEditor({
 					editor.dispatch(
 						{
 							type: "deleteText",
-							blockId: command.blockId,
-							start,
-							end: start + 1,
+							payload: {
+								blockId: command.blockId,
+								start,
+								end: start + 1,
+							},
 						},
 						{ history: "merge" },
 					);

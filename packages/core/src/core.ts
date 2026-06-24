@@ -118,7 +118,7 @@ export class MiniBlockCore {
 
   updateBlock(id: string, patch: Partial<Block>) {
     this.dispatch(
-      { type: "updateBlock", id, patch },
+      { type: "updateBlock", payload: { id, patch } },
       {
         history: "merge",
       },
@@ -142,7 +142,10 @@ export class MiniBlockCore {
 
   splitBlock(blockId: string, offset: number) {
     this.dispatch(
-      { type: "splitBlock", blockId, offset, newBlockId: createBlockId() },
+      {
+        type: "splitBlock",
+        payload: { blockId, offset, newBlockId: createBlockId() },
+      },
       {
         history: "record",
       },
@@ -151,7 +154,7 @@ export class MiniBlockCore {
 
   mergeBlockBackward(blockId: string) {
     this.dispatch(
-      { type: "mergeBlockBackward", blockId },
+      { type: "mergeBlockBackward", payload: { blockId } },
       {
         history: "record",
       },
@@ -160,7 +163,7 @@ export class MiniBlockCore {
 
   deleteBlockBackward(blockId: string): void {
     this.dispatch(
-      { type: "deleteBlockBackward", blockId },
+      { type: "deleteBlockBackward", payload: { blockId } },
       {
         history: "record",
       },
@@ -175,9 +178,11 @@ export class MiniBlockCore {
     this.dispatch(
       {
         type: "changeBlockType",
-        blockId,
-        blockType,
-        newContent,
+        payload: {
+          blockId,
+          blockType,
+          newContent,
+        },
       },
       {
         history: "record",
@@ -281,30 +286,29 @@ export class MiniBlockCore {
   ): CommandResult {
     switch (command.type) {
       case "updateBlock":
-        return updateBlockHandler(state, selection, command);
+        return updateBlockHandler(state, selection, command.payload);
       case "insertText":
-        return insertTextHandler(state, selection, command);
+        return insertTextHandler(state, selection, command.payload);
       case "deleteText":
-        return deleteTextHandler(state, selection, command);
+        return deleteTextHandler(state, selection, command.payload);
       case "splitBlock":
-        return splitBlockHandler(state, selection, command);
+        return splitBlockHandler(state, selection, command.payload);
       case "mergeBlockBackward":
-        return mergeBlockBackwardHandler(state, selection, command);
+        return mergeBlockBackwardHandler(state, selection, command.payload);
       case "deleteBlockBackward":
-        return deleteBlockBackwardHandler(state, selection, command);
+        return deleteBlockBackwardHandler(state, selection, command.payload);
       case "changeBlockType":
-        return changeBlockTypeHandler(state, selection, command);
+        return changeBlockTypeHandler(state, selection, command.payload);
       case "replaceBlocks":
-        return replaceBlocksHandler(state, selection, command);
-      default: {
-        return {
-          state,
-          selection,
-          inverse: null,
-        };
-      }
+        return replaceBlocksHandler(state, selection, command.payload);
+      default:
+        return assertNever(command);
     }
   }
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled command: ${JSON.stringify(value)}`);
 }
 
 function isSelectionEqual(
@@ -331,24 +335,30 @@ function mergeHistoryRecord(
     current.command.type === "insertText" &&
     previous.inverse.type === "deleteText" &&
     current.inverse.type === "deleteText" &&
-    previous.command.blockId === current.command.blockId &&
-    current.command.offset ===
-      previous.command.offset + previous.command.text.length
+    previous.command.payload.blockId === current.command.payload.blockId &&
+    current.command.payload.offset ===
+      previous.command.payload.offset + previous.command.payload.text.length
   ) {
-    const text = previous.command.text + current.command.text;
+    const previousPayload = previous.command.payload;
+    const currentPayload = current.command.payload;
+    const text = previousPayload.text + currentPayload.text;
 
     return {
       command: {
         type: "insertText",
-        blockId: previous.command.blockId,
-        offset: previous.command.offset,
-        text,
+        payload: {
+          blockId: previousPayload.blockId,
+          offset: previousPayload.offset,
+          text,
+        },
       },
       inverse: {
         type: "deleteText",
-        blockId: previous.command.blockId,
-        start: previous.command.offset,
-        end: previous.command.offset + text.length,
+        payload: {
+          blockId: previousPayload.blockId,
+          start: previousPayload.offset,
+          end: previousPayload.offset + text.length,
+        },
       },
       selectionBefore: previous.selectionBefore,
       selectionAfter: current.selectionAfter,
@@ -360,23 +370,33 @@ function mergeHistoryRecord(
     current.command.type === "deleteText" &&
     previous.inverse.type === "insertText" &&
     current.inverse.type === "insertText" &&
-    previous.command.blockId === current.command.blockId
+    previous.command.payload.blockId === current.command.payload.blockId
   ) {
-    if (current.command.start === previous.command.start) {
-      const deletedText = previous.inverse.text + current.inverse.text;
+    const previousPayload = previous.command.payload;
+    const currentPayload = current.command.payload;
+    const previousInversePayload = previous.inverse.payload;
+    const currentInversePayload = current.inverse.payload;
+
+    if (currentPayload.start === previousPayload.start) {
+      const deletedText =
+        previousInversePayload.text + currentInversePayload.text;
 
       return {
         command: {
           type: "deleteText",
-          blockId: previous.command.blockId,
-          start: previous.command.start,
-          end: previous.command.start + deletedText.length,
+          payload: {
+            blockId: previousPayload.blockId,
+            start: previousPayload.start,
+            end: previousPayload.start + deletedText.length,
+          },
         },
         inverse: {
           type: "insertText",
-          blockId: previous.command.blockId,
-          offset: previous.command.start,
-          text: deletedText,
+          payload: {
+            blockId: previousPayload.blockId,
+            offset: previousPayload.start,
+            text: deletedText,
+          },
         },
         selectionBefore: previous.selectionBefore,
         selectionAfter: current.selectionAfter,
@@ -384,23 +404,28 @@ function mergeHistoryRecord(
     }
 
     if (
-      current.command.start + current.inverse.text.length ===
-      previous.command.start
+      currentPayload.start + currentInversePayload.text.length ===
+      previousPayload.start
     ) {
-      const deletedText = current.inverse.text + previous.inverse.text;
+      const deletedText =
+        currentInversePayload.text + previousInversePayload.text;
 
       return {
         command: {
           type: "deleteText",
-          blockId: previous.command.blockId,
-          start: current.command.start,
-          end: current.command.start + deletedText.length,
+          payload: {
+            blockId: previousPayload.blockId,
+            start: currentPayload.start,
+            end: currentPayload.start + deletedText.length,
+          },
         },
         inverse: {
           type: "insertText",
-          blockId: previous.command.blockId,
-          offset: current.command.start,
-          text: deletedText,
+          payload: {
+            blockId: previousPayload.blockId,
+            offset: currentPayload.start,
+            text: deletedText,
+          },
         },
         selectionBefore: previous.selectionBefore,
         selectionAfter: current.selectionAfter,
@@ -411,7 +436,7 @@ function mergeHistoryRecord(
   if (
     previous.command.type === "updateBlock" &&
     current.command.type === "updateBlock" &&
-    previous.command.id === current.command.id
+    previous.command.payload.id === current.command.payload.id
   ) {
     return {
       command: current.command,
