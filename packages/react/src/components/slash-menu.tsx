@@ -6,6 +6,102 @@ import {
 import { useSlashMenu } from "../hooks/use-slash-menu";
 import { matchSlashTrigger } from "../utils/slash-trigger";
 
+const COMMAND_ICONS: Record<string, React.ReactNode> = {
+	p: (
+		<svg
+			width="14"
+			height="14"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="2"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			aria-hidden="true"
+		>
+			<line x1="21" y1="6" x2="3" y2="6" />
+			<line x1="21" y1="12" x2="9" y2="12" />
+			<line x1="21" y1="18" x2="3" y2="18" />
+		</svg>
+	),
+	h1: (
+		<svg
+			width="14"
+			height="14"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="2.5"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			aria-hidden="true"
+		>
+			<path d="M4 12h6M4 6v12M10 6v12M15 8h2v10M14 18h4" />
+		</svg>
+	),
+	h2: (
+		<svg
+			width="14"
+			height="14"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="2.5"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			aria-hidden="true"
+		>
+			<path d="M4 12h6M4 6v12M10 6v12M14 9a2.5 2.5 0 0 1 5 0c0 2-3 3-5 5h5" />
+		</svg>
+	),
+	h3: (
+		<svg
+			width="14"
+			height="14"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="2.5"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			aria-hidden="true"
+		>
+			<path d="M4 12h6M4 6v12M10 6v12M14 9a2.5 2.5 0 0 1 5 0c0 1.5-1.5 2.5-2.5 2.5 1 0 2.5 1 2.5 2.5a2.5 2.5 0 0 1-5 0" />
+		</svg>
+	),
+	blockquote: (
+		<svg
+			width="14"
+			height="14"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="2"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			aria-hidden="true"
+		>
+			<path d="M3 21c3 0 7-1 7-8V5c0-1.25-.75-2-2-2H4c-1.25 0-2 .75-2 2v4c0 1.25.75 2 2 2h3c0 4-2 6-4 6M15 21c3 0 7-1 7-8V5c0-1.25-.75-2-2-2h-4c-1.25 0-2 .75-2 2v4c0 1.25.75 2 2 2h3c0 4-2 6-4 6" />
+		</svg>
+	),
+	pre: (
+		<svg
+			width="14"
+			height="14"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="2"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			aria-hidden="true"
+		>
+			<polyline points="16 18 22 12 16 6" />
+			<polyline points="8 6 2 12 8 18" />
+		</svg>
+	),
+};
+
 export function SlashMenu() {
 	const { selection, blocks, readOnly } = useBlockEditorState();
 	const { editor, blocksRef, registerKeyDownInterceptor } =
@@ -97,7 +193,18 @@ export function SlashMenu() {
 						);
 					}}
 				>
-					{item.label}
+					<span className="mb-slash-menu__item-icon">
+						{COMMAND_ICONS[item.type]}
+					</span>
+					<span className="mb-slash-menu__item-content">
+						<span className="mb-slash-menu__item-label">{item.label}</span>
+						<span className="mb-slash-menu__item-description">
+							{item.description}
+						</span>
+					</span>
+					{item.shortcut && (
+						<kbd className="mb-slash-menu__item-shortcut">{item.shortcut}</kbd>
+					)}
 				</button>
 			))}
 		</div>

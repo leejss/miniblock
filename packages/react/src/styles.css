@@ -1,25 +1,52 @@
 .mb-editor {
-	--mb-color-text: #37352f;
-	--mb-color-muted: #787774;
-	--mb-color-bg: #ffffff;
-	--mb-color-hover: #efefed;
-	--mb-color-border: #e6e4df;
-	--mb-color-code-bg: #f7f6f3;
-	--mb-font-family: ui-sans-serif, system-ui, sans-serif;
-	--mb-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
-	--mb-block-min-height: 24px;
-	--mb-block-gap: 2px;
-	color: var(--mb-color-text, #37352f);
-	background: var(--mb-color-bg, #fff);
+	/* Premium Dark Theme (Default) */
+	--mb-color-bg: #08080a;
+	--mb-color-surface: rgba(18, 18, 21, 0.85);
+	--mb-color-text: #f7f8f8;
+	--mb-color-muted: #8a8f98;
+	--mb-color-hover: rgba(255, 255, 255, 0.06);
+	--mb-color-border: rgba(255, 255, 255, 0.08);
+	--mb-color-focus: #5e6ad2;
+	--mb-color-focus-glow: rgba(94, 106, 210, 0.25);
+	--mb-color-code-bg: #141416;
+
+	--mb-font-family:
+		"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+	--mb-font-mono:
+		"SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	--mb-block-min-height: 28px;
+	--mb-block-gap: 6px;
+	--mb-border-radius: 8px;
+	--mb-shadow-md:
+		0 12px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--mb-color-border);
+	--mb-transition: 150ms cubic-bezier(0.16, 1, 0.3, 1);
+
+	color: var(--mb-color-text);
+	background: var(--mb-color-bg);
 	font-family: var(--mb-font-family);
+	line-height: 1.6;
+	-webkit-font-smoothing: antialiased;
+}
+
+/* Light Theme Support */
+.mb-editor.mb-editor--light {
+	--mb-color-bg: #fafafa;
+	--mb-color-surface: rgba(255, 255, 255, 0.9);
+	--mb-color-text: #111113;
+	--mb-color-muted: #6b7280;
+	--mb-color-hover: rgba(0, 0, 0, 0.04);
+	--mb-color-border: rgba(0, 0, 0, 0.08);
+	--mb-color-focus: #5e6ad2;
+	--mb-color-focus-glow: rgba(94, 106, 210, 0.12);
+	--mb-color-code-bg: #f4f4f5;
+	--mb-shadow-md:
+		0 12px 30px rgba(0, 0, 0, 0.06), 0 0 0 1px var(--mb-color-border);
 }
 
 .mb-editor .mb-editor__page {
 	max-width: 720px;
 	margin: 0 auto;
-	padding: 96px 96px 40vh;
-
-	/* Positioning context */
+	padding: 80px 40px 40vh;
 	position: relative;
 }
 
@@ -29,71 +56,116 @@
 	outline: none;
 	color: var(--mb-color-text);
 	font-family: var(--mb-font-family);
-	line-height: 1.5;
+	line-height: 1.6;
 	white-space: pre-wrap;
 	word-break: break-word;
+	border-radius: 4px;
+	padding: 2px 6px;
+	caret-color: var(--mb-color-focus);
+	border: 1px solid transparent;
+	transition: background-color var(--mb-transition);
 }
 
+/* Notion-style minimal writing canvas: no intrusive borders on paragraph focus, just pure text flow */
 .mb-editor .mb-block + .mb-block {
 	margin-top: var(--mb-block-gap);
 }
 
+/* Headings with Slack/Notion proportions & Linear clean margins */
 .mb-editor .mb-block[data-block-type="h1"] {
-	font-size: 40px;
+	font-size: 32px;
 	font-weight: 700;
-	line-height: 1.15;
+	line-height: 1.25;
+	letter-spacing: -0.02em;
+	color: var(--mb-color-text);
 }
 
 .mb-editor .mb-block[data-block-type="h2"] {
-	font-size: 30px;
-	font-weight: 700;
-	line-height: 1.25;
+	font-size: 24px;
+	font-weight: 600;
+	line-height: 1.3;
+	letter-spacing: -0.015em;
+	color: var(--mb-color-text);
 }
 
 .mb-editor .mb-block[data-block-type="h3"] {
-	font-size: 24px;
-	font-weight: 700;
-	line-height: 1.3;
+	font-size: 20px;
+	font-weight: 600;
+	line-height: 1.4;
+	letter-spacing: -0.01em;
+	color: var(--mb-color-text);
 }
 
 .mb-editor .mb-block + .mb-block[data-block-type="h1"],
 .mb-editor .mb-block + .mb-block[data-block-type="h2"],
 .mb-editor .mb-block + .mb-block[data-block-type="h3"] {
-	margin-top: 16px;
+	margin-top: 24px;
 }
 
+/* Blockquote: Slack style border combined with Linear accent glow */
 .mb-editor .mb-block[data-block-type="blockquote"] {
-	border-left: 3px solid var(--mb-color-text);
-	padding-left: 14px;
+	border-left: 3px solid var(--mb-color-focus);
+	background: rgba(94, 106, 210, 0.04);
+	border-radius: 0 6px 6px 0;
+	padding: 8px 16px;
 	color: var(--mb-color-muted);
+	font-style: italic;
 }
 
+/* Code block: High-fidelity terminal look */
 .mb-editor .mb-block[data-block-type="pre"] {
 	background: var(--mb-color-code-bg);
-	border-radius: 6px;
+	border: 1px solid var(--mb-color-border);
+	border-radius: var(--mb-border-radius);
 	font-family: var(--mb-font-mono);
-	padding: 16px;
+	font-size: 13.5px;
+	padding: 14px 18px;
+	margin: 12px 0;
+	box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+.mb-editor .mb-block[data-block-type="pre"]:focus {
+	border-color: var(--mb-color-focus);
+	box-shadow:
+		0 0 0 2px var(--mb-color-focus-glow),
+		inset 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
+/* Glassmorphic Slash Menu (Linear Command Palette Vibe) */
 .mb-editor .mb-slash-menu {
 	position: absolute;
-	width: 280px;
+	z-index: 100;
+	width: 320px;
+	max-height: 380px;
+	overflow-y: auto;
 	padding: 6px;
 	border: 1px solid var(--mb-color-border);
-	border-radius: 8px;
-	background: var(--mb-color-bg);
-	box-shadow: 0 8px 24px rgba(15, 15, 15, 0.12);
+	border-radius: 10px;
+	background: var(--mb-color-surface);
+	backdrop-filter: blur(12px) saturate(180%);
+	-webkit-backdrop-filter: blur(12px) saturate(180%);
+	box-shadow: var(--mb-shadow-md);
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	transition:
+		opacity 150ms ease,
+		transform 150ms ease;
 }
 
 .mb-editor .mb-slash-menu button {
+	display: flex;
+	align-items: center;
 	width: 100%;
-	height: 32px;
+	padding: 6px 8px;
 	border: 0;
 	background: transparent;
 	color: var(--mb-color-text);
-	font: inherit;
+	font-family: var(--mb-font-family);
 	text-align: left;
-	border-radius: 4px;
+	border-radius: 6px;
+	cursor: pointer;
+	gap: 12px;
+	transition: background-color var(--mb-transition);
 }
 
 .mb-editor .mb-slash-menu button.active,
@@ -101,8 +173,69 @@
 	background: var(--mb-color-hover);
 }
 
+/* Item SVG Icon Box */
+.mb-editor .mb-slash-menu__item-icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	border-radius: 6px;
+	background: rgba(255, 255, 255, 0.05);
+	border: 1px solid var(--mb-color-border);
+	color: var(--mb-color-muted);
+	flex-shrink: 0;
+	transition:
+		color var(--mb-transition),
+		background-color var(--mb-transition);
+}
+.mb-editor .mb-slash-menu button.active .mb-slash-menu__item-icon,
+.mb-editor .mb-slash-menu button:hover .mb-slash-menu__item-icon {
+	background: rgba(255, 255, 255, 0.1);
+	color: var(--mb-color-text);
+}
+
+/* Item Text Stack */
+.mb-editor .mb-slash-menu__item-content {
+	display: flex;
+	flex-direction: column;
+	flex-grow: 1;
+	min-width: 0; /* Enable text truncation if needed */
+}
+
+.mb-editor .mb-slash-menu__item-label {
+	font-size: 13.5px;
+	font-weight: 500;
+	color: var(--mb-color-text);
+}
+
+.mb-editor .mb-slash-menu__item-description {
+	font-size: 11px;
+	color: var(--mb-color-muted);
+	margin-top: 1px;
+}
+
+/* Keycap Shortcut Badge (Linear vibe) */
+.mb-editor .mb-slash-menu__item-shortcut {
+	font-family: var(--mb-font-mono);
+	font-size: 10px;
+	color: var(--mb-color-muted);
+	background: rgba(255, 255, 255, 0.08);
+	border: 1px solid rgba(255, 255, 255, 0.04);
+	padding: 2px 6px;
+	border-radius: 4px;
+	flex-shrink: 0;
+	box-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+}
+.mb-editor.mb-editor--light .mb-slash-menu__item-shortcut {
+	background: rgba(0, 0, 0, 0.04);
+	border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+/* Placeholder styling */
 .mb-block[data-placeholder]::before {
 	content: attr(data-placeholder);
-	color: #9ca3af;
+	color: var(--mb-color-muted);
+	opacity: 0.5;
 	pointer-events: none;
 }
