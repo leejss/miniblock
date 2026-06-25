@@ -9,6 +9,7 @@ import {
 	useCallback,
 	useEffect,
 	useLayoutEffect,
+	useMemo,
 	useRef,
 } from "react";
 import {
@@ -22,8 +23,13 @@ import {
 } from "./dom-selection";
 import { matchTextShortcut } from "./shortcuts";
 import "./styles.css";
+import {
+	BlockEditorActionsContext,
+	BlockEditorStateContext,
+	type KeyDownInterceptor,
+} from "./context";
+import { SlashMenu } from "./slash-menu";
 import { useBlockEditor } from "./use-block-editor";
-import { useSlashMenu } from "./use-slash-menu";
 
 type InputIntent =
 	| {
@@ -92,14 +98,17 @@ export function BlockEditor({
 	const prevSelectionRef = useRef<EditorSelection | null>(null);
 	const beforeInputHandlerRef = useRef<(event: InputEvent) => void>(() => {});
 
-	const {
-		menuState: slashMenu,
-		filteredCommands,
-		openMenu,
-		closeMenu,
-		selectItem: selectSlashItem,
-		handleKeyDown: handleSlashKeyDown,
-	} = useSlashMenu(changeBlockType);
+	const interceptorsRef = useRef<Set<KeyDownInterceptor>>(new Set());
+
+	const registerKeyDownInterceptor = useCallback(
+		(interceptor: KeyDownInterceptor) => {
+			interceptorsRef.current.add(interceptor);
+			return () => {
+				interceptorsRef.current.delete(interceptor);
+			};
+		},
+		[],
+	);
 
 	const syncSelectionFromDom = useCallback(() => {
 		setSelection(readSelectionFromDom(blocksRef.current));
@@ -113,12 +122,11 @@ export function BlockEditor({
 				// TODO:
 				// maybe we can call like
 				// updateBlock(blockId, {type: shortcut.type})
-				closeMenu();
 				return;
 			}
 			updateBlock(blockId, { content });
 		},
-		[changeBlockType, updateBlock, closeMenu],
+		[changeBlockType, updateBlock],
 	);
 
 	const handleInputIntent = useCallback(
@@ -138,7 +146,6 @@ export function BlockEditor({
 
 				if (shortcut) {
 					changeBlockType(command.blockId, shortcut.type, "");
-					closeMenu();
 					return;
 				}
 
@@ -254,7 +261,6 @@ export function BlockEditor({
 			splitBlock,
 			deleteBlockBackward,
 			mergeBlockBackward,
-			closeMenu,
 		],
 	);
 
@@ -398,12 +404,15 @@ export function BlockEditor({
 			const blockId = blockElement.dataset.blockId;
 			if (!blockId) return;
 
-			if (handleHistoryShortcut(event, editor)) return;
-
-			if (slashMenu?.blockId === blockId) {
-				const handled = handleSlashKeyDown(event, blockElement);
-				if (handled) return;
+			// 1. Run keydown interceptors in reverse order (LIFO)
+			const interceptors = Array.from(interceptorsRef.current).reverse();
+			for (const interceptor of interceptors) {
+				if (interceptor(event, { blockId, blockElement })) {
+					return;
+				}
 			}
+
+			if (handleHistoryShortcut(event, editor)) return;
 
 			if (
 				handleBlockMutationKeys(event, blockId, blockElement, {
@@ -420,8 +429,6 @@ export function BlockEditor({
 		[
 			readOnly,
 			editor,
-			slashMenu,
-			handleSlashKeyDown,
 			splitBlock,
 			deleteBlockBackward,
 			mergeBlockBackward,
@@ -429,47 +436,6 @@ export function BlockEditor({
 			setSelection,
 		],
 	);
-
-	useEffect(() => {
-		if (readOnly) {
-			closeMenu();
-			return;
-		}
-
-		if (!selection) {
-			closeMenu();
-			return;
-		}
-
-		const isCollapsed =
-			selection.anchor.blockId === selection.focus.blockId &&
-			selection.anchor.offset === selection.focus.offset;
-
-		if (!isCollapsed) {
-			closeMenu();
-			return;
-		}
-
-		const { blockId, offset } = selection.focus;
-		const block = blocks.find((b) => b.id === blockId);
-		if (!block) {
-			closeMenu();
-			return;
-		}
-
-		const triggerMatch = matchSlashTrigger(block.content, offset);
-		if (!triggerMatch) {
-			closeMenu();
-			return;
-		}
-
-		const element = blocksRef.current.get(blockId);
-		if (element) {
-			openMenu(blockId, triggerMatch.query, element);
-		} else {
-			closeMenu();
-		}
-	}, [selection, blocks, openMenu, closeMenu, readOnly]);
 
 	useLayoutEffect(() => {
 		beforeInputHandlerRef.current = handleNativeBeforeInput;
@@ -522,76 +488,72 @@ export function BlockEditor({
 		};
 	}, [readOnly, syncSelectionFromDom]);
 
+	const stateValue = useMemo(
+		() => ({ selection, blocks, readOnly: !!readOnly }),
+		[selection, blocks, readOnly],
+	);
+
+	const actionsValue = useMemo(
+		() => ({
+			editor,
+			blocksRef,
+			registerKeyDownInterceptor,
+		}),
+		[editor, registerKeyDownInterceptor],
+	);
+
 	return (
-		<div
-			className={["mb-editor", className].filter(Boolean).join(" ")}
-			style={style}
-		>
-			{/* biome-ignore lint/a11y/noStaticElementInteractions: delegated event handler container */}
-			<div
-				ref={editorRootRef}
-				className="mb-editor__page"
-				onCompositionStart={handleCompositionStart}
-				onCompositionEnd={handleCompositionEnd}
-				onInput={handleInput}
-				onKeyDown={handleKeyDown}
-			>
-				{blocks.map((block) => {
-					const Block = block.type as BlockType;
-					const showPlaceholder =
-						Boolean(placeholder) &&
-						blocks.length === 1 &&
-						block.content.length === 0;
-					return (
-						<Block
-							key={block.id}
-							data-block-id={block.id}
-							data-block-type={block.type}
-							data-placeholder={showPlaceholder ? placeholder : undefined}
-							contentEditable={!readOnly}
-							suppressContentEditableWarning
-							className="mb-block"
-							ref={(el: HTMLElement | null) => {
-								if (el) {
-									blocksRef.current.set(block.id, el);
-									if (
-										!isComposingRef.current &&
-										el.textContent !== block.content
-									) {
-										el.textContent = block.content;
-									}
-								} else {
-									blocksRef.current.delete(block.id);
-								}
-							}}
-						/>
-					);
-				})}
-				{slashMenu && filteredCommands.length > 0 ? (
+		<BlockEditorStateContext.Provider value={stateValue}>
+			<BlockEditorActionsContext.Provider value={actionsValue}>
+				<div
+					className={["mb-editor", className].filter(Boolean).join(" ")}
+					style={style}
+				>
+					{/* biome-ignore lint/a11y/noStaticElementInteractions: delegated event handler container */}
 					<div
-						className="mb-slash-menu"
-						style={{ top: slashMenu.top, left: slashMenu.left }}
+						ref={editorRootRef}
+						className="mb-editor__page"
+						onCompositionStart={handleCompositionStart}
+						onCompositionEnd={handleCompositionEnd}
+						onInput={handleInput}
+						onKeyDown={handleKeyDown}
 					>
-						{filteredCommands.map((item, index) => (
-							<button
-								key={item.type}
-								type="button"
-								className={index === slashMenu.activeIndex ? "active" : ""}
-								onMouseDown={(event) => {
-									event.preventDefault();
-									selectSlashItem(
-										item.type,
-										blocksRef.current.get(slashMenu.blockId) ?? null,
-									);
-								}}
-							>
-								{item.label}
-							</button>
-						))}
+						{blocks.map((block) => {
+							const Block = block.type as BlockType;
+							const showPlaceholder =
+								Boolean(placeholder) &&
+								blocks.length === 1 &&
+								block.content.length === 0;
+							return (
+								<Block
+									key={block.id}
+									data-block-id={block.id}
+									data-block-type={block.type}
+									data-placeholder={showPlaceholder ? placeholder : undefined}
+									contentEditable={!readOnly}
+									suppressContentEditableWarning
+									className="mb-block"
+									ref={(el: HTMLElement | null) => {
+										if (el) {
+											blocksRef.current.set(block.id, el);
+											if (
+												!isComposingRef.current &&
+												el.textContent !== block.content
+											) {
+												el.textContent = block.content;
+											}
+										} else {
+											blocksRef.current.delete(block.id);
+										}
+									}}
+								/>
+							);
+						})}
+						<SlashMenu />
 					</div>
-				) : null}
-			</div>
-		</div>
+				</div>
+			</BlockEditorActionsContext.Provider>
+		</BlockEditorStateContext.Provider>
 	);
 }
 
@@ -690,15 +652,6 @@ function handleCaretNavigation(
 	});
 
 	return true;
-}
-
-function matchSlashTrigger(content: string, offset: number) {
-	const textBeforeCaret = content.slice(0, offset);
-	const match = textBeforeCaret.match(/(?:^|\s)\/([a-zA-Z0-9]*)$/);
-	if (!match) return null;
-	return {
-		query: match[1],
-	};
 }
 
 function isCompositionInput(inputType: string) {
