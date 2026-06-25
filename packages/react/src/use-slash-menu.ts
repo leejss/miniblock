@@ -29,10 +29,15 @@ export function useSlashMenu(
 			setMenuState((prev) => {
 				const prevActiveIndex =
 					prev?.blockId === blockId ? prev.activeIndex : 0;
-				// 필터링된 결과 범위 밖으로 나가지 않도록 activeIndex 조정
+
+				const currentFilteredCommands = blockCommands.filter(
+					(cmd) =>
+						cmd.label.toLowerCase().includes(query.toLowerCase()) ||
+						cmd.type.toLowerCase().includes(query.toLowerCase()),
+				);
 				const nextActiveIndex =
-					filteredCommands.length > 0
-						? prevActiveIndex >= filteredCommands.length
+					currentFilteredCommands.length > 0
+						? prevActiveIndex >= currentFilteredCommands.length
 							? 0
 							: prevActiveIndex
 						: 0;
@@ -46,7 +51,7 @@ export function useSlashMenu(
 				};
 			});
 		},
-		[filteredCommands.length],
+		[],
 	);
 
 	const closeMenu = useCallback(() => {

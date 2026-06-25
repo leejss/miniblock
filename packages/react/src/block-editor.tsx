@@ -91,6 +91,7 @@ export function BlockEditor({
 	const isComposingRef = useRef(false);
 	const prevSelectionRef = useRef<EditorSelection | null>(null);
 	const beforeInputHandlerRef = useRef<(event: InputEvent) => void>(() => {});
+
 	const {
 		menuState: slashMenu,
 		filteredCommands,
@@ -104,21 +105,8 @@ export function BlockEditor({
 		setSelection(readSelectionFromDom(blocksRef.current));
 	}, [setSelection]);
 
-	const updateSlashMenu = useCallback(
-		(blockId: string, content: string, element: HTMLElement) => {
-			const triggerMatch = matchSlashTrigger(content);
-			if (triggerMatch) {
-				openMenu(blockId, triggerMatch.query, element);
-				return;
-			}
-
-			closeMenu();
-		},
-		[openMenu, closeMenu],
-	);
-
 	const commitBlockContent = useCallback(
-		(blockId: string, content: string, element: HTMLElement) => {
+		(blockId: string, content: string) => {
 			const shortcut = matchTextShortcut(content);
 			if (shortcut) {
 				changeBlockType(blockId, shortcut.type, "");
@@ -129,9 +117,8 @@ export function BlockEditor({
 				return;
 			}
 			updateBlock(blockId, { content });
-			updateSlashMenu(blockId, content, element);
 		},
-		[changeBlockType, updateBlock, updateSlashMenu, closeMenu],
+		[changeBlockType, updateBlock, closeMenu],
 	);
 
 	const handleInputIntent = useCallback(
@@ -166,7 +153,6 @@ export function BlockEditor({
 					},
 					{ history: "merge" },
 				);
-				updateSlashMenu(command.blockId, nextContent, command.blockElement);
 				return;
 			}
 
@@ -178,7 +164,6 @@ export function BlockEditor({
 				const { start, end } = command.range;
 				// Range Deletion
 				if (start !== end) {
-					const nextContent = deleteTextRange(block.content, start, end);
 					editor.dispatch(
 						{
 							type: "deleteText",
@@ -190,14 +175,12 @@ export function BlockEditor({
 						},
 						{ history: "merge" },
 					);
-					updateSlashMenu(command.blockId, nextContent, command.blockElement);
 					return;
 				}
 
 				// Character Deletion
 				if (start > 0) {
 					const nextOffset = start - 1;
-					const nextContent = deleteTextRange(block.content, nextOffset, start);
 					editor.dispatch(
 						{
 							type: "deleteText",
@@ -209,7 +192,6 @@ export function BlockEditor({
 						},
 						{ history: "merge" },
 					);
-					updateSlashMenu(command.blockId, nextContent, command.blockElement);
 					return;
 				}
 
@@ -227,7 +209,6 @@ export function BlockEditor({
 				const { start, end } = command.range;
 
 				if (start !== end) {
-					const nextContent = deleteTextRange(block.content, start, end);
 					editor.dispatch(
 						{
 							type: "deleteText",
@@ -239,12 +220,10 @@ export function BlockEditor({
 						},
 						{ history: "merge" },
 					);
-					updateSlashMenu(command.blockId, nextContent, command.blockElement);
 					return;
 				}
 
 				if (start < block.content.length) {
-					const nextContent = deleteTextRange(block.content, start, start + 1);
 					editor.dispatch(
 						{
 							type: "deleteText",
@@ -256,7 +235,6 @@ export function BlockEditor({
 						},
 						{ history: "merge" },
 					);
-					updateSlashMenu(command.blockId, nextContent, command.blockElement);
 					return;
 				}
 
@@ -276,7 +254,6 @@ export function BlockEditor({
 			splitBlock,
 			deleteBlockBackward,
 			mergeBlockBackward,
-			updateSlashMenu,
 			closeMenu,
 		],
 	);
@@ -382,7 +359,7 @@ export function BlockEditor({
 			if (!blockId) return;
 
 			const content = blockElement.textContent ?? "";
-			commitBlockContent(blockId, content, blockElement);
+			commitBlockContent(blockId, content);
 			syncSelectionFromDom();
 		},
 		[commitBlockContent, readOnly, syncSelectionFromDom],
@@ -404,7 +381,7 @@ export function BlockEditor({
 			if (!blockId) return;
 
 			const content = blockElement.textContent ?? "";
-			commitBlockContent(blockId, content, blockElement);
+			commitBlockContent(blockId, content);
 			syncSelectionFromDom();
 		},
 		[commitBlockContent, readOnly, syncSelectionFromDom],
@@ -452,6 +429,47 @@ export function BlockEditor({
 			setSelection,
 		],
 	);
+
+	useEffect(() => {
+		if (readOnly) {
+			closeMenu();
+			return;
+		}
+
+		if (!selection) {
+			closeMenu();
+			return;
+		}
+
+		const isCollapsed =
+			selection.anchor.blockId === selection.focus.blockId &&
+			selection.anchor.offset === selection.focus.offset;
+
+		if (!isCollapsed) {
+			closeMenu();
+			return;
+		}
+
+		const { blockId, offset } = selection.focus;
+		const block = blocks.find((b) => b.id === blockId);
+		if (!block) {
+			closeMenu();
+			return;
+		}
+
+		const triggerMatch = matchSlashTrigger(block.content, offset);
+		if (!triggerMatch) {
+			closeMenu();
+			return;
+		}
+
+		const element = blocksRef.current.get(blockId);
+		if (element) {
+			openMenu(blockId, triggerMatch.query, element);
+		} else {
+			closeMenu();
+		}
+	}, [selection, blocks, openMenu, closeMenu, readOnly]);
 
 	useLayoutEffect(() => {
 		beforeInputHandlerRef.current = handleNativeBeforeInput;
@@ -674,8 +692,9 @@ function handleCaretNavigation(
 	return true;
 }
 
-function matchSlashTrigger(content: string) {
-	const match = content.match(/(?:^|\s)\/([a-zA-Z0-9]*)$/);
+function matchSlashTrigger(content: string, offset: number) {
+	const textBeforeCaret = content.slice(0, offset);
+	const match = textBeforeCaret.match(/(?:^|\s)\/([a-zA-Z0-9]*)$/);
 	if (!match) return null;
 	return {
 		query: match[1],
@@ -692,12 +711,6 @@ function isCompositionInput(inputType: string) {
 function insertTextAt(content: string, offset: number, text: string) {
 	const safeOffset = Math.max(0, Math.min(offset, content.length));
 	return content.slice(0, safeOffset) + text + content.slice(safeOffset);
-}
-
-function deleteTextRange(content: string, start: number, end: number) {
-	const safeStart = Math.max(0, Math.min(start, content.length));
-	const safeEnd = Math.max(safeStart, Math.min(end, content.length));
-	return content.slice(0, safeStart) + content.slice(safeEnd);
 }
 
 function isBeforeInputSupported() {
