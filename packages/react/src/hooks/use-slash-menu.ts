@@ -1,6 +1,7 @@
 import type { BlockType } from "@miniblock/core";
 import { useCallback, useState } from "react";
-import { blockCommands } from "./commands";
+import type { KeyboardInputInfo } from "../editor-engine/editor-input-engine";
+import { blockCommands } from "../utils/block-commands";
 
 export type SlashMenuState = {
 	blockId: string;
@@ -79,7 +80,7 @@ export function useSlashMenu(
 	);
 
 	const handleKeyDown = useCallback(
-		(event: React.KeyboardEvent, blockElement: HTMLElement | null) => {
+		(event: KeyboardInputInfo, blockElement: HTMLElement | null) => {
 			if (!menuState) return false;
 
 			const moveActive = (direction: 1 | -1) => {

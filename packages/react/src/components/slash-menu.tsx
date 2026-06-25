@@ -1,7 +1,10 @@
 import { useEffect } from "react";
-import { useBlockEditorActions, useBlockEditorState } from "./context";
-import { useSlashMenu } from "./use-slash-menu";
-import { matchSlashTrigger } from "./utils";
+import {
+	useBlockEditorActions,
+	useBlockEditorState,
+} from "../hooks/use-block-editor-context";
+import { useSlashMenu } from "../hooks/use-slash-menu";
+import { matchSlashTrigger } from "../utils/slash-trigger";
 
 export function SlashMenu() {
 	const { selection, blocks, readOnly } = useBlockEditorState();
@@ -70,7 +73,7 @@ export function SlashMenu() {
 		});
 
 		return unregister;
-	}, [slashMenu, handleSlashKeyDown, registerKeyDownInterceptor, blocksRef]);
+	}, [slashMenu, handleSlashKeyDown, registerKeyDownInterceptor]);
 
 	if (!slashMenu || filteredCommands.length === 0) {
 		return null;

@@ -1,6 +1,6 @@
 import type { BlockType } from "@miniblock/core";
 
-export type BlockComamnd = {
+export type BlockCommand = {
 	label: string;
 	type: BlockType;
 };
@@ -12,4 +12,4 @@ export const blockCommands = [
 	{ label: "Heading 3", type: "h3" },
 	{ label: "Quote", type: "blockquote" },
 	{ label: "Code", type: "pre" },
-] as const satisfies readonly BlockComamnd[];
+] as const satisfies readonly BlockCommand[];

@@ -5,13 +5,15 @@ import type {
 } from "@miniblock/core";
 import { createContext, type RefObject, useContext } from "react";
 
+import type { KeyboardInputInfo } from "../editor-engine/editor-input-engine";
+
 export type KeyDownInterceptorContext = {
 	blockId: string;
 	blockElement: HTMLElement;
 };
 
 export type KeyDownInterceptor = (
-	event: React.KeyboardEvent,
+	info: KeyboardInputInfo,
 	context: KeyDownInterceptorContext,
 ) => boolean;
 
