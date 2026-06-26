@@ -1,5 +1,5 @@
 import type { BlockType, EditorState } from "@miniblock/core";
-import { type CSSProperties, useMemo, useRef } from "react";
+import { type CSSProperties, type ElementType, useMemo, useRef } from "react";
 import { useBlockEditor } from "../hooks/use-block-editor";
 import {
 	BlockEditorActionsContext,
@@ -18,6 +18,16 @@ export type BlockEditorProps = {
 	placeholder?: string;
 	className?: string;
 	style?: CSSProperties;
+};
+
+const BLOCK_TAG_BY_TYPE: Record<BlockType, ElementType> = {
+	paragraph: "p",
+	heading1: "h1",
+	heading2: "h2",
+	heading3: "h3",
+	quote: "blockquote",
+	codeBlock: "pre",
+	bulletedListItem: "div",
 };
 
 export function BlockEditor({
@@ -92,20 +102,27 @@ export function BlockEditor({
 						onKeyDown={handleKeyDown}
 					>
 						{blocks.map((block) => {
-							const Block = block.type as BlockType;
+							const BlockTag = BLOCK_TAG_BY_TYPE[block.type];
+							const indent = block.indent ?? 0;
+							const blockStyle = {
+								"--mb-indent-level": indent,
+							} as CSSProperties;
+
 							const showPlaceholder =
 								Boolean(placeholder) &&
 								blocks.length === 1 &&
 								block.content.length === 0;
 							return (
-								<Block
+								<BlockTag
 									key={block.id}
 									data-block-id={block.id}
 									data-block-type={block.type}
+									data-indent={indent}
 									data-placeholder={showPlaceholder ? placeholder : undefined}
 									contentEditable={!readOnly}
 									suppressContentEditableWarning
 									className="mb-block"
+									style={blockStyle}
 									ref={(el: HTMLElement | null) => {
 										if (el) {
 											blocksRef.current.set(block.id, el);

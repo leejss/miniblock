@@ -1,4 +1,4 @@
-import type { MiniBlockCore } from "@miniblock/core";
+import { MAX_BULLET_INDENT, type MiniBlockCore } from "@miniblock/core";
 import type { KeyDownInterceptor } from "../hooks/use-block-editor-context";
 import { findClosestBlockElement } from "../utils/dom-block";
 import {
@@ -222,6 +222,26 @@ export class EditorInputEngine {
 			}
 		}
 
+		if (info.key === "Tab") {
+			const blocks = this.editor.getBlocks();
+			const block = blocks.find((b) => b.id === blockId);
+			if (block && block.type === "bulletedListItem") {
+				info.preventDefault();
+				const currentIndent = block.indent ?? 0;
+				if (info.shiftKey) {
+					if (currentIndent > 0) {
+						this.editor.updateBlock(blockId, { indent: currentIndent - 1 });
+					}
+				} else {
+					if (currentIndent < MAX_BULLET_INDENT) {
+						this.editor.updateBlock(blockId, { indent: currentIndent + 1 });
+					}
+				}
+				this.syncSelectionFromDom();
+				return;
+			}
+		}
+
 		if (this.handleHistoryShortcut(info)) return;
 
 		if (this.handleBlockMutationKeys(info, blockId, blockElement)) {
@@ -308,6 +328,22 @@ export class EditorInputEngine {
 					},
 					{ history: "merge" },
 				);
+				return;
+			}
+
+			if (block.type === "bulletedListItem") {
+				const currentIndent = block.indent ?? 0;
+				if (currentIndent > 0) {
+					this.editor.updateBlock(command.blockId, {
+						indent: currentIndent - 1,
+					});
+				} else {
+					this.editor.changeBlockType(
+						command.blockId,
+						"paragraph",
+						block.content,
+					);
+				}
 				return;
 			}
 
@@ -409,6 +445,19 @@ export class EditorInputEngine {
 			if (!isAtStart) return false;
 
 			info.preventDefault();
+
+			const blocks = this.editor.getBlocks();
+			const block = blocks.find((b) => b.id === blockId);
+			if (block && block.type === "bulletedListItem") {
+				const currentIndent = block.indent ?? 0;
+				if (currentIndent > 0) {
+					this.editor.updateBlock(blockId, { indent: currentIndent - 1 });
+				} else {
+					this.editor.changeBlockType(blockId, "paragraph", block.content);
+				}
+				return true;
+			}
+
 			const isEmpty = (blockElement.textContent ?? "") === "";
 
 			if (isEmpty) {

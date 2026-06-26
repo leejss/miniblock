@@ -1,3 +1,4 @@
+import { normalizeBlock } from "./blocks";
 import type { CommandHandler, CommandResult } from "./commands";
 import { createCollapsedSelection, normalizeSelection } from "./selection";
 import {
@@ -31,7 +32,9 @@ export const updateBlockHandler: CommandHandler<"updateBlock"> = (
 
 	const previousBlock = state.blocks[index];
 	const blocks = state.blocks.map((block) =>
-		block.id === payload.id ? { ...block, ...payload.patch } : block,
+		block.id === payload.id
+			? normalizeBlock({ ...block, ...payload.patch })
+			: block,
 	);
 	const nextState = { ...state, blocks };
 
@@ -60,6 +63,35 @@ export const splitBlockHandler: CommandHandler<"splitBlock"> = (
 
 	const previousBlock = state.blocks[index];
 	const block = state.blocks[index];
+
+	// If splitting an empty bullet list item, convert it to a paragraph and reset indentation instead
+	if (block.type === "bulletedListItem" && block.content === "") {
+		const updatedBlock = normalizeBlock({
+			...block,
+			type: "paragraph",
+			indent: undefined,
+		});
+		const blocks = state.blocks.map((b) =>
+			b.id === payload.blockId ? updatedBlock : b,
+		);
+		return {
+			state: {
+				...state,
+				blocks,
+			},
+			selection: createCollapsedSelection(payload.blockId, 0),
+			inverse: {
+				type: "replaceBlocks",
+				payload: {
+					start: index,
+					deleteCount: 1,
+					blocks: [previousBlock],
+					selection,
+				},
+			},
+		};
+	}
+
 	const offset = Math.max(0, Math.min(payload.offset, block.content.length));
 	const nextState = splitBlockState(state, {
 		blockId: payload.blockId,

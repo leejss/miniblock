@@ -1,4 +1,4 @@
-import { createBlock } from "./blocks";
+import { createBlock, normalizeBlock } from "./blocks";
 import { createBlockId } from "./id";
 import {
 	type Block,
@@ -40,11 +40,12 @@ function normalizeBlocks(value: unknown): Block[] {
 
 		seenIds.add(id);
 
-		return {
+		return normalizeBlock({
 			id,
-			type: isBlockType(block.type) ? block.type : "p",
+			type: isBlockType(block.type) ? block.type : "paragraph",
 			content: typeof block.content === "string" ? block.content : "",
-		};
+			indent: block.indent,
+		});
 	});
 }
 

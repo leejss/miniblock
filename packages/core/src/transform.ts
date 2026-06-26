@@ -1,5 +1,5 @@
-import { createBlock } from "./blocks";
-import type { Block, BlockType, EditorState } from "./types";
+import { createBlock, normalizeBlock } from "./blocks";
+import type { BlockType, EditorState } from "./types";
 
 export function splitBlockState(
 	state: EditorState,
@@ -18,14 +18,16 @@ export function splitBlockState(
 	const before = block.content.slice(0, offset);
 	const after = block.content.slice(offset);
 
-	const currentBlock: Block = {
+	const currentBlock = normalizeBlock({
 		...block,
 		content: before,
-	};
+	});
 
 	const newBlock = createBlock({
 		id: input.newBlockId,
 		content: after,
+		type: block.type === "bulletedListItem" ? "bulletedListItem" : "paragraph",
+		indent: block.type === "bulletedListItem" ? block.indent : undefined,
 	});
 
 	const blocks = [
@@ -51,10 +53,10 @@ export function mergeBlockBackwardState(
 	const currentBlock = state.blocks[index];
 	const previousBlock = state.blocks[index - 1];
 
-	const mergedBlock: Block = {
+	const mergedBlock = normalizeBlock({
 		...previousBlock,
 		content: previousBlock.content + currentBlock.content,
-	};
+	});
 
 	const nextBlocks = [
 		...state.blocks.slice(0, index - 1),
@@ -102,11 +104,11 @@ export function changeBlockTypeState(
 	const content = input.newContent ?? block.content;
 	const blocks = state.blocks.map((block) =>
 		block.id === input.blockId
-			? {
+			? normalizeBlock({
 					...block,
 					type: input.type,
 					content,
-				}
+				})
 			: block,
 	);
 

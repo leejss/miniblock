@@ -72,7 +72,7 @@
 }
 
 /* Headings with Slack/Notion proportions & Linear clean margins */
-.mb-editor .mb-block[data-block-type="h1"] {
+.mb-editor .mb-block[data-block-type="heading1"] {
 	font-size: 32px;
 	font-weight: 700;
 	line-height: 1.25;
@@ -80,7 +80,7 @@
 	color: var(--mb-color-text);
 }
 
-.mb-editor .mb-block[data-block-type="h2"] {
+.mb-editor .mb-block[data-block-type="heading2"] {
 	font-size: 24px;
 	font-weight: 600;
 	line-height: 1.3;
@@ -88,7 +88,7 @@
 	color: var(--mb-color-text);
 }
 
-.mb-editor .mb-block[data-block-type="h3"] {
+.mb-editor .mb-block[data-block-type="heading3"] {
 	font-size: 20px;
 	font-weight: 600;
 	line-height: 1.4;
@@ -96,14 +96,14 @@
 	color: var(--mb-color-text);
 }
 
-.mb-editor .mb-block + .mb-block[data-block-type="h1"],
-.mb-editor .mb-block + .mb-block[data-block-type="h2"],
-.mb-editor .mb-block + .mb-block[data-block-type="h3"] {
+.mb-editor .mb-block + .mb-block[data-block-type="heading1"],
+.mb-editor .mb-block + .mb-block[data-block-type="heading2"],
+.mb-editor .mb-block + .mb-block[data-block-type="heading3"] {
 	margin-top: 24px;
 }
 
 /* Blockquote: Slack style border combined with Linear accent glow */
-.mb-editor .mb-block[data-block-type="blockquote"] {
+.mb-editor .mb-block[data-block-type="quote"] {
 	border-left: 3px solid var(--mb-color-focus);
 	background: rgba(94, 106, 210, 0.04);
 	border-radius: 0 6px 6px 0;
@@ -113,7 +113,7 @@
 }
 
 /* Code block: High-fidelity terminal look */
-.mb-editor .mb-block[data-block-type="pre"] {
+.mb-editor .mb-block[data-block-type="codeBlock"] {
 	background: var(--mb-color-code-bg);
 	border: 1px solid var(--mb-color-border);
 	border-radius: var(--mb-border-radius);
@@ -123,7 +123,7 @@
 	margin: 12px 0;
 	box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
 }
-.mb-editor .mb-block[data-block-type="pre"]:focus {
+.mb-editor .mb-block[data-block-type="codeBlock"]:focus {
 	border-color: var(--mb-color-focus);
 	box-shadow:
 		0 0 0 2px var(--mb-color-focus-glow),
@@ -238,4 +238,54 @@
 	color: var(--mb-color-muted);
 	opacity: 0.5;
 	pointer-events: none;
+}
+
+/* Bulleted list: Notion-style clean markers with shifting indicator shapes depending on depth */
+.mb-editor .mb-block[data-block-type="bulletedListItem"] {
+	position: relative;
+	padding-left: calc(28px + var(--mb-indent-level, 0) * 24px);
+}
+
+/* Bullet markers with smooth transitions & responsive alignment */
+.mb-editor .mb-block[data-block-type="bulletedListItem"]::before {
+	content: "";
+	position: absolute;
+	left: calc(14px + var(--mb-indent-level, 0) * 24px);
+	top: 13px; /* centered vertical alignment with line-height */
+	width: 5px;
+	height: 5px;
+	border-radius: 50%;
+	background-color: var(--mb-color-text);
+	opacity: 0.65;
+	pointer-events: none;
+	transition:
+		background-color var(--mb-transition),
+		opacity var(--mb-transition);
+}
+
+/* Level 1 bullet (Hollow circle) */
+.mb-editor
+.mb-block[data-block-type="bulletedListItem"]:is(
+	[data-indent="1"],
+	[data-indent="4"]
+)::before {
+	background-color: transparent;
+	border: 1.5px solid var(--mb-color-text);
+	width: 4px;
+	height: 4px;
+	top: 13px;
+	box-sizing: border-box;
+}
+
+/* Level 2 bullet (Solid square) */
+.mb-editor
+.mb-block[data-block-type="bulletedListItem"]:is(
+	[data-indent="2"],
+	[data-indent="5"]
+)::before {
+	border-radius: 0;
+	width: 4px;
+	height: 4px;
+	top: 13.5px;
+	opacity: 0.55;
 }

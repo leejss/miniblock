@@ -8,23 +8,31 @@ export type TextShortcut = {
 export const textShortcuts = [
 	{
 		trigger: "# ",
-		type: "h1",
+		type: "heading1",
 	},
 	{
 		trigger: "## ",
-		type: "h2",
+		type: "heading2",
 	},
 	{
 		trigger: "### ",
-		type: "h3",
+		type: "heading3",
 	},
 	{
 		trigger: "> ",
-		type: "blockquote",
+		type: "quote",
 	},
 	{
 		trigger: "``` ",
-		type: "pre",
+		type: "codeBlock",
+	},
+	{
+		trigger: "- ",
+		type: "bulletedListItem",
+	},
+	{
+		trigger: "* ",
+		type: "bulletedListItem",
 	},
 ] as const satisfies readonly TextShortcut[];
 

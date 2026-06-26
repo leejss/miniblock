@@ -1,17 +1,19 @@
 import type { BlockType, EditorSelection, SelectionPoint } from "./types";
 
 const BLOCK_TYPES = new Set<BlockType>([
-	"p",
-	"h1",
-	"h2",
-	"h3",
-	"blockquote",
-	"pre",
+	"paragraph",
+	"heading1",
+	"heading2",
+	"heading3",
+	"quote",
+	"codeBlock",
+	"bulletedListItem",
 ]);
 
 export function isBlockType(value: unknown): value is BlockType {
 	return typeof value === "string" && BLOCK_TYPES.has(value as BlockType);
 }
+
 export function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;
 }

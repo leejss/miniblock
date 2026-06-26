@@ -1,35 +1,35 @@
-import type { EditorState } from "@miniblock/core";
+import { EDITOR_STATE_SCHEMA_VERSION, type EditorState } from "@miniblock/core";
 import { BlockEditor } from "@miniblock/react";
 import { useEffect, useState } from "react";
 
 const initialState: EditorState = {
-	schemaVersion: 1,
+	schemaVersion: EDITOR_STATE_SCHEMA_VERSION,
 	blocks: [
 		{
 			id: "intro",
-			type: "h1",
+			type: "heading1",
 			content: "miniblock",
 		},
 		{
 			id: "first",
-			type: "p",
+			type: "paragraph",
 			content: "A lightweight block editor adapter running in React.",
 		},
 		{
 			id: "second",
-			type: "p",
+			type: "paragraph",
 			content:
 				"Type '/' to trigger the slash commands. Edit content and split blocks with Enter.",
 		},
 		{
 			id: "quote-example",
-			type: "blockquote",
+			type: "quote",
 			content:
 				"Capture highlights, callouts or notes in this cozy styled blockquote.",
 		},
 		{
 			id: "code-example",
-			type: "pre",
+			type: "codeBlock",
 			content:
 				"// Linear-inspired code block\nconst greeting = 'Hello, Miniblock!';\nconsole.log(greeting);",
 		},
