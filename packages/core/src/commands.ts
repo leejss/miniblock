@@ -1,41 +1,35 @@
-import type { Block, BlockType, EditorSelection, EditorState } from "./types";
+import type { Block, EditorSelection, EditorState } from "./types";
+
+export type TextRange = {
+	start: number;
+	end: number;
+};
+
+export type BlockPatch = {
+	type?: Block["type"];
+	content?: string;
+	indent?: number | undefined;
+};
+
+export type SelectionEffect =
+	| { type: "preserve" }
+	| { type: "set"; selection: EditorSelection | null }
+	| { type: "collapse"; blockId: string; offset?: number };
 
 export type CommandPayloadMap = {
-	updateBlock: {
-		id: string;
-		patch: Partial<Block>;
-	};
-	insertText: {
+	replaceText: {
 		blockId: string;
-		offset: number;
+		range: TextRange;
 		text: string;
 	};
-	deleteText: {
+	patchBlock: {
 		blockId: string;
-		start: number;
-		end: number;
+		patch: BlockPatch;
 	};
-	splitBlock: {
-		blockId: string;
-		offset: number;
-		newBlockId: string;
-	};
-	mergeBlockBackward: {
-		blockId: string;
-	};
-	deleteBlockBackward: {
-		blockId: string;
-	};
-	changeBlockType: {
-		blockId: string;
-		blockType: BlockType;
-		newContent?: string;
-	};
-	replaceBlocks: {
-		start: number;
+	spliceBlocks: {
+		index: number;
 		deleteCount: number;
-		blocks: Block[];
-		selection: EditorSelection | null;
+		insert: Block[];
 	};
 };
 
@@ -47,6 +41,7 @@ export type EditorCommand = {
 	[T in CommandType]: {
 		type: T;
 		payload: CommandPayload<T>;
+		select?: SelectionEffect;
 	};
 }[CommandType];
 

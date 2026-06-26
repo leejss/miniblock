@@ -281,10 +281,13 @@ export class EditorInputEngine {
 
 			this.editor.dispatch(
 				{
-					type: "insertText",
+					type: "replaceText",
 					payload: {
 						blockId: command.blockId,
-						offset: command.offset,
+						range: {
+							start: command.offset,
+							end: command.offset,
+						},
 						text: command.text,
 					},
 				},
@@ -304,11 +307,14 @@ export class EditorInputEngine {
 			if (start !== end) {
 				this.editor.dispatch(
 					{
-						type: "deleteText",
+						type: "replaceText",
 						payload: {
 							blockId: command.blockId,
-							start,
-							end,
+							range: {
+								start,
+								end,
+							},
+							text: "",
 						},
 					},
 					{ history: "merge" },
@@ -319,11 +325,14 @@ export class EditorInputEngine {
 			if (start > 0) {
 				this.editor.dispatch(
 					{
-						type: "deleteText",
+						type: "replaceText",
 						payload: {
 							blockId: command.blockId,
-							start: start - 1,
-							end: start,
+							range: {
+								start: start - 1,
+								end: start,
+							},
+							text: "",
 						},
 					},
 					{ history: "merge" },
@@ -362,11 +371,14 @@ export class EditorInputEngine {
 			if (start !== end) {
 				this.editor.dispatch(
 					{
-						type: "deleteText",
+						type: "replaceText",
 						payload: {
 							blockId: command.blockId,
-							start,
-							end,
+							range: {
+								start,
+								end,
+							},
+							text: "",
 						},
 					},
 					{ history: "merge" },
@@ -377,11 +389,14 @@ export class EditorInputEngine {
 			if (start < block.content.length) {
 				this.editor.dispatch(
 					{
-						type: "deleteText",
+						type: "replaceText",
 						payload: {
 							blockId: command.blockId,
-							start,
-							end: start + 1,
+							range: {
+								start,
+								end: start + 1,
+							},
+							text: "",
 						},
 					},
 					{ history: "merge" },

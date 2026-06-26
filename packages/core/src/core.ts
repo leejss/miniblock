@@ -1,24 +1,22 @@
+import { createBlock, normalizeBlock } from "./blocks";
 import type {
+	BlockPatch,
 	CommandResult,
 	DispatchOptions,
 	EditorCommand,
 	HistoryPolicy,
+	SelectionEffect,
+	TextRange,
 } from "./commands";
 import {
-	changeBlockTypeHandler,
-	deleteBlockBackwardHandler,
-	deleteTextHandler,
-	insertTextHandler,
-	mergeBlockBackwardHandler,
-	replaceBlocksHandler,
-	splitBlockHandler,
-	updateBlockHandler,
+	patchBlockHandler,
+	replaceTextHandler,
+	spliceBlocksHandler,
 } from "./handlers";
 import { createBlockId } from "./id";
-import { normalizeSelection } from "./selection";
+import { createCollapsedSelection, normalizeSelection } from "./selection";
 import { createEmptyState, normalizeState } from "./state";
 import type {
-	Block,
 	BlockType,
 	EditorChange,
 	EditorRuntimeState,
@@ -116,9 +114,9 @@ export class MiniBlockCore {
 		}
 	}
 
-	updateBlock(id: string, patch: Partial<Block>) {
+	updateBlock(id: string, patch: BlockPatch) {
 		this.dispatch(
-			{ type: "updateBlock", payload: { id, patch } },
+			{ type: "patchBlock", payload: { blockId: id, patch } },
 			{
 				history: "merge",
 			},
@@ -141,10 +139,54 @@ export class MiniBlockCore {
 	}
 
 	splitBlock(blockId: string, offset: number) {
+		const index = this.state.blocks.findIndex((block) => block.id === blockId);
+		if (index === -1) return;
+
+		const block = this.state.blocks[index];
+
+		if (block.type === "bulletedListItem" && block.content === "") {
+			this.dispatch(
+				{
+					type: "patchBlock",
+					payload: {
+						blockId,
+						patch: {
+							type: "paragraph",
+							indent: undefined,
+						},
+					},
+					select: { type: "collapse", blockId, offset: 0 },
+				},
+				{
+					history: "record",
+				},
+			);
+			return;
+		}
+
+		const splitOffset = Math.max(0, Math.min(offset, block.content.length));
+		const newBlockId = createBlockId();
+		const currentBlock = normalizeBlock({
+			...block,
+			content: block.content.slice(0, splitOffset),
+		});
+		const newBlock = createBlock({
+			id: newBlockId,
+			content: block.content.slice(splitOffset),
+			type:
+				block.type === "bulletedListItem" ? "bulletedListItem" : "paragraph",
+			indent: block.type === "bulletedListItem" ? block.indent : undefined,
+		});
+
 		this.dispatch(
 			{
-				type: "splitBlock",
-				payload: { blockId, offset, newBlockId: createBlockId() },
+				type: "spliceBlocks",
+				payload: {
+					index,
+					deleteCount: 1,
+					insert: [currentBlock, newBlock],
+				},
+				select: { type: "collapse", blockId: newBlockId },
 			},
 			{
 				history: "record",
@@ -153,8 +195,31 @@ export class MiniBlockCore {
 	}
 
 	mergeBlockBackward(blockId: string) {
+		const index = this.state.blocks.findIndex((block) => block.id === blockId);
+		if (index <= 0) return;
+
+		const previousBlock = this.state.blocks[index - 1];
+		const currentBlock = this.state.blocks[index];
+		const offset = previousBlock.content.length;
+		const mergedBlock = normalizeBlock({
+			...previousBlock,
+			content: previousBlock.content + currentBlock.content,
+		});
+
 		this.dispatch(
-			{ type: "mergeBlockBackward", payload: { blockId } },
+			{
+				type: "spliceBlocks",
+				payload: {
+					index: index - 1,
+					deleteCount: 2,
+					insert: [mergedBlock],
+				},
+				select: {
+					type: "collapse",
+					blockId: previousBlock.id,
+					offset,
+				},
+			},
 			{
 				history: "record",
 			},
@@ -162,8 +227,25 @@ export class MiniBlockCore {
 	}
 
 	deleteBlockBackward(blockId: string): void {
+		const index = this.state.blocks.findIndex((block) => block.id === blockId);
+		if (index <= 0) return;
+
+		const previousBlock = this.state.blocks[index - 1];
+
 		this.dispatch(
-			{ type: "deleteBlockBackward", payload: { blockId } },
+			{
+				type: "spliceBlocks",
+				payload: {
+					index,
+					deleteCount: 1,
+					insert: [],
+				},
+				select: {
+					type: "collapse",
+					blockId: previousBlock.id,
+					offset: previousBlock.content.length,
+				},
+			},
 			{
 				history: "record",
 			},
@@ -175,14 +257,23 @@ export class MiniBlockCore {
 		blockType: BlockType,
 		newContent?: string,
 	): void {
+		const block = this.state.blocks.find((block) => block.id === blockId);
+		if (!block) return;
+
+		const content = newContent ?? block.content;
+		const patch: BlockPatch = { type: blockType };
+		if (newContent !== undefined) {
+			patch.content = newContent;
+		}
+
 		this.dispatch(
 			{
-				type: "changeBlockType",
+				type: "patchBlock",
 				payload: {
 					blockId,
-					blockType,
-					newContent,
+					patch,
 				},
+				select: { type: "collapse", blockId, offset: content.length },
 			},
 			{
 				history: "record",
@@ -284,31 +375,58 @@ export class MiniBlockCore {
 		selection: EditorSelection | null,
 		command: EditorCommand,
 	): CommandResult {
+		let result: CommandResult;
+
 		switch (command.type) {
-			case "updateBlock":
-				return updateBlockHandler(state, selection, command.payload);
-			case "insertText":
-				return insertTextHandler(state, selection, command.payload);
-			case "deleteText":
-				return deleteTextHandler(state, selection, command.payload);
-			case "splitBlock":
-				return splitBlockHandler(state, selection, command.payload);
-			case "mergeBlockBackward":
-				return mergeBlockBackwardHandler(state, selection, command.payload);
-			case "deleteBlockBackward":
-				return deleteBlockBackwardHandler(state, selection, command.payload);
-			case "changeBlockType":
-				return changeBlockTypeHandler(state, selection, command.payload);
-			case "replaceBlocks":
-				return replaceBlocksHandler(state, selection, command.payload);
+			case "replaceText":
+				result = replaceTextHandler(state, selection, command.payload);
+				break;
+			case "patchBlock":
+				result = patchBlockHandler(state, selection, command.payload);
+				break;
+			case "spliceBlocks":
+				result = spliceBlocksHandler(state, selection, command.payload);
+				break;
 			default:
 				return assertNever(command);
 		}
+
+		return {
+			...result,
+			selection: applySelectionEffect(
+				result.state.blocks,
+				selection,
+				result.selection,
+				command.select,
+			),
+		};
 	}
 }
 
 function assertNever(value: never): never {
 	throw new Error(`Unhandled command: ${JSON.stringify(value)}`);
+}
+
+function applySelectionEffect(
+	blocks: EditorState["blocks"],
+	previousSelection: EditorSelection | null,
+	defaultSelection: EditorSelection | null,
+	effect: SelectionEffect | undefined,
+) {
+	if (!effect) return normalizeSelection(blocks, defaultSelection);
+
+	if (effect.type === "preserve") {
+		return normalizeSelection(blocks, previousSelection);
+	}
+
+	if (effect.type === "set") {
+		return normalizeSelection(blocks, effect.selection);
+	}
+
+	return normalizeSelection(
+		blocks,
+		createCollapsedSelection(effect.blockId, effect.offset ?? 0),
+	);
 }
 
 function isSelectionEqual(
@@ -330,116 +448,27 @@ function mergeHistoryRecord(
 	previous: HistoryRecord,
 	current: HistoryRecord,
 ): HistoryRecord | null {
-	if (
-		previous.command.type === "insertText" &&
-		current.command.type === "insertText" &&
-		previous.inverse.type === "deleteText" &&
-		current.inverse.type === "deleteText" &&
-		previous.command.payload.blockId === current.command.payload.blockId &&
-		current.command.payload.offset ===
-			previous.command.payload.offset + previous.command.payload.text.length
-	) {
-		const previousPayload = previous.command.payload;
-		const currentPayload = current.command.payload;
-		const text = previousPayload.text + currentPayload.text;
-
-		return {
-			command: {
-				type: "insertText",
-				payload: {
-					blockId: previousPayload.blockId,
-					offset: previousPayload.offset,
-					text,
-				},
-			},
-			inverse: {
-				type: "deleteText",
-				payload: {
-					blockId: previousPayload.blockId,
-					start: previousPayload.offset,
-					end: previousPayload.offset + text.length,
-				},
-			},
-			selectionBefore: previous.selectionBefore,
-			selectionAfter: current.selectionAfter,
-		};
-	}
+	const mergedReplaceText = mergeReplaceTextHistory(previous, current);
+	if (mergedReplaceText) return mergedReplaceText;
 
 	if (
-		previous.command.type === "deleteText" &&
-		current.command.type === "deleteText" &&
-		previous.inverse.type === "insertText" &&
-		current.inverse.type === "insertText" &&
+		previous.command.type === "patchBlock" &&
+		current.command.type === "patchBlock" &&
+		previous.inverse.type === "patchBlock" &&
 		previous.command.payload.blockId === current.command.payload.blockId
 	) {
-		const previousPayload = previous.command.payload;
-		const currentPayload = current.command.payload;
-		const previousInversePayload = previous.inverse.payload;
-		const currentInversePayload = current.inverse.payload;
-
-		if (currentPayload.start === previousPayload.start) {
-			const deletedText =
-				previousInversePayload.text + currentInversePayload.text;
-
-			return {
-				command: {
-					type: "deleteText",
-					payload: {
-						blockId: previousPayload.blockId,
-						start: previousPayload.start,
-						end: previousPayload.start + deletedText.length,
-					},
-				},
-				inverse: {
-					type: "insertText",
-					payload: {
-						blockId: previousPayload.blockId,
-						offset: previousPayload.start,
-						text: deletedText,
-					},
-				},
-				selectionBefore: previous.selectionBefore,
-				selectionAfter: current.selectionAfter,
-			};
-		}
-
-		if (
-			currentPayload.start + currentInversePayload.text.length ===
-			previousPayload.start
-		) {
-			const deletedText =
-				currentInversePayload.text + previousInversePayload.text;
-
-			return {
-				command: {
-					type: "deleteText",
-					payload: {
-						blockId: previousPayload.blockId,
-						start: currentPayload.start,
-						end: currentPayload.start + deletedText.length,
-					},
-				},
-				inverse: {
-					type: "insertText",
-					payload: {
-						blockId: previousPayload.blockId,
-						offset: currentPayload.start,
-						text: deletedText,
-					},
-				},
-				selectionBefore: previous.selectionBefore,
-				selectionAfter: current.selectionAfter,
-			};
-		}
-	}
-
-	if (
-		previous.command.type === "updateBlock" &&
-		current.command.type === "updateBlock" &&
-		previous.command.payload.id === current.command.payload.id
-	) {
 		return {
-			command: current.command,
+			command: {
+				type: "patchBlock",
+				payload: {
+					blockId: previous.command.payload.blockId,
+					patch: {
+						...previous.command.payload.patch,
+						...current.command.payload.patch,
+					},
+				},
+				select: current.command.select,
+			},
 			inverse: previous.inverse,
 			selectionBefore: previous.selectionBefore,
 			selectionAfter: current.selectionAfter,
@@ -447,4 +476,137 @@ function mergeHistoryRecord(
 	}
 
 	return null;
+}
+
+function mergeReplaceTextHistory(
+	previous: HistoryRecord,
+	current: HistoryRecord,
+): HistoryRecord | null {
+	if (
+		previous.command.type !== "replaceText" ||
+		current.command.type !== "replaceText" ||
+		previous.inverse.type !== "replaceText" ||
+		current.inverse.type !== "replaceText" ||
+		previous.command.payload.blockId !== current.command.payload.blockId
+	) {
+		return null;
+	}
+
+	const previousPayload = previous.command.payload;
+	const currentPayload = current.command.payload;
+	const previousInversePayload = previous.inverse.payload;
+	const currentInversePayload = current.inverse.payload;
+
+	if (
+		isPureInsert(previousPayload.range, previousPayload.text) &&
+		isPureInsert(currentPayload.range, currentPayload.text) &&
+		currentPayload.range.start ===
+			previousPayload.range.start + previousPayload.text.length
+	) {
+		const text = previousPayload.text + currentPayload.text;
+
+		return {
+			command: {
+				type: "replaceText",
+				payload: {
+					blockId: previousPayload.blockId,
+					range: {
+						start: previousPayload.range.start,
+						end: previousPayload.range.start,
+					},
+					text,
+				},
+			},
+			inverse: {
+				type: "replaceText",
+				payload: {
+					blockId: previousPayload.blockId,
+					range: {
+						start: previousPayload.range.start,
+						end: previousPayload.range.start + text.length,
+					},
+					text: "",
+				},
+			},
+			selectionBefore: previous.selectionBefore,
+			selectionAfter: current.selectionAfter,
+		};
+	}
+
+	if (
+		isPureDelete(previousPayload.range, previousPayload.text) &&
+		isPureDelete(currentPayload.range, currentPayload.text) &&
+		isPureInsert(previousInversePayload.range, previousInversePayload.text) &&
+		isPureInsert(currentInversePayload.range, currentInversePayload.text)
+	) {
+		if (currentPayload.range.start === previousPayload.range.start) {
+			const text = previousInversePayload.text + currentInversePayload.text;
+
+			return createMergedDeleteHistory(previous, current, {
+				blockId: previousPayload.blockId,
+				start: previousPayload.range.start,
+				text,
+			});
+		}
+
+		if (
+			currentPayload.range.start + currentInversePayload.text.length ===
+			previousPayload.range.start
+		) {
+			const text = currentInversePayload.text + previousInversePayload.text;
+
+			return createMergedDeleteHistory(previous, current, {
+				blockId: previousPayload.blockId,
+				start: currentPayload.range.start,
+				text,
+			});
+		}
+	}
+
+	return null;
+}
+
+function createMergedDeleteHistory(
+	previous: HistoryRecord,
+	current: HistoryRecord,
+	input: {
+		blockId: string;
+		start: number;
+		text: string;
+	},
+): HistoryRecord {
+	return {
+		command: {
+			type: "replaceText",
+			payload: {
+				blockId: input.blockId,
+				range: {
+					start: input.start,
+					end: input.start + input.text.length,
+				},
+				text: "",
+			},
+		},
+		inverse: {
+			type: "replaceText",
+			payload: {
+				blockId: input.blockId,
+				range: {
+					start: input.start,
+					end: input.start,
+				},
+				text: input.text,
+			},
+		},
+		selectionBefore: previous.selectionBefore,
+		selectionAfter: current.selectionAfter,
+	};
+}
+
+function isPureInsert(range: TextRange, text: string) {
+	return range.start === range.end && text.length > 0;
+}
+
+function isPureDelete(range: TextRange, text: string) {
+	return range.start < range.end && text.length === 0;
 }
