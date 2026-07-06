@@ -15,11 +15,10 @@ import {
 } from "./handlers";
 import { createBlockId } from "./id";
 import { createCollapsedSelection, normalizeSelection } from "./selection";
-import { createEmptyState, normalizeState } from "./state";
+import { createEmptyState, normalizeState, validateState } from "./state";
 import type {
 	BlockType,
 	EditorChange,
-	EditorRuntimeState,
 	EditorSelection,
 	EditorSnapshot,
 	EditorState,
@@ -36,39 +35,28 @@ type HistoryRecord = {
 
 export class MiniBlockCore {
 	private state: EditorState;
-	private runtime: EditorRuntimeState;
+	private selection: EditorSelection | null = null;
 	private snapshot: EditorSnapshot;
 	private listeners = new Set<Listener>();
 	private past: HistoryRecord[] = [];
 	private future: HistoryRecord[] = [];
 
-	constructor(
-		initialState?: EditorState,
-		initialSelection?: EditorSelection | null,
-	) {
+	constructor(initialState?: EditorState) {
 		this.state = initialState
-			? normalizeState(initialState)
+			? validateState(initialState)
 			: createEmptyState();
-		this.runtime = {
-			selection: normalizeSelection(
-				this.state.blocks,
-				initialSelection ?? null,
-			),
-		};
+
 		this.snapshot = this.createSnapshot();
 	}
 
 	setState(nextState: EditorState, options?: { emit: boolean }) {
 		const state = normalizeState(nextState);
-		const selection = normalizeSelection(state.blocks, this.runtime.selection);
+		const selection = normalizeSelection(state.blocks, this.selection);
 		const stateChanged = state !== this.state;
-		const selectionChanged = !isSelectionEqual(
-			selection,
-			this.runtime.selection,
-		);
+		const selectionChanged = !isSelectionEqual(selection, this.selection);
 
 		this.state = state;
-		this.runtime = { selection };
+		this.selection = selection;
 		this.snapshot = this.createSnapshot();
 
 		if (options?.emit) {
@@ -81,7 +69,7 @@ export class MiniBlockCore {
 	}
 
 	getSelection() {
-		return this.runtime.selection;
+		return this.selection;
 	}
 
 	getSnapshot() {
@@ -104,9 +92,9 @@ export class MiniBlockCore {
 		options?: { emit?: boolean },
 	) {
 		const nextSelection = normalizeSelection(this.state.blocks, selection);
-		if (isSelectionEqual(this.runtime.selection, nextSelection)) return;
+		if (isSelectionEqual(this.selection, nextSelection)) return;
 
-		this.runtime = { selection: nextSelection };
+		this.selection = nextSelection;
 		this.snapshot = this.createSnapshot();
 
 		if (options?.emit !== false) {
@@ -126,7 +114,9 @@ export class MiniBlockCore {
 	private createSnapshot(): EditorSnapshot {
 		return {
 			state: this.state,
-			runtime: this.runtime,
+			runtime: {
+				selection: this.selection,
+			},
 		};
 	}
 
@@ -287,7 +277,7 @@ export class MiniBlockCore {
 
 		const result = this.applyCommand(
 			this.state,
-			this.runtime.selection,
+			this.selection,
 			record.inverse,
 		);
 		const selection = normalizeSelection(
@@ -297,7 +287,7 @@ export class MiniBlockCore {
 
 		this.future.push(record);
 		this.state = result.state;
-		this.runtime = { selection };
+		this.selection = selection;
 		this.snapshot = this.createSnapshot();
 		this.emit({ stateChanged: true, selectionChanged: true });
 	}
@@ -308,7 +298,7 @@ export class MiniBlockCore {
 
 		const result = this.applyCommand(
 			this.state,
-			this.runtime.selection,
+			this.selection,
 			record.command,
 		);
 		const selection = normalizeSelection(
@@ -318,7 +308,7 @@ export class MiniBlockCore {
 
 		this.past.push(record);
 		this.state = result.state;
-		this.runtime = { selection };
+		this.selection = selection;
 		this.snapshot = this.createSnapshot();
 		this.emit({ stateChanged: true, selectionChanged: true });
 	}
@@ -340,12 +330,12 @@ export class MiniBlockCore {
 	}
 
 	dispatch(command: EditorCommand, options: DispatchOptions = {}) {
-		const selectionBefore = this.runtime.selection;
+		const selectionBefore = this.selection;
 		const result = this.applyCommand(this.state, selectionBefore, command);
 		const stateChanged = result.state !== this.state;
 		const selectionChanged = !isSelectionEqual(
 			result.selection,
-			this.runtime.selection,
+			this.selection,
 		);
 
 		if (!stateChanged && !selectionChanged) return;
@@ -365,7 +355,7 @@ export class MiniBlockCore {
 		}
 
 		this.state = result.state;
-		this.runtime = { selection: result.selection };
+		this.selection = result.selection;
 		this.snapshot = this.createSnapshot();
 		this.emit({ stateChanged, selectionChanged });
 	}

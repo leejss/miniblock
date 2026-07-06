@@ -5,7 +5,10 @@ function normalizePoint(
 	point: SelectionPoint,
 ): SelectionPoint | null {
 	const block = blocks.find((block) => block.id === point.blockId);
-	if (!block) return null;
+
+	if (!block) {
+		return null;
+	}
 
 	const offset = Math.max(0, Math.min(point.offset, block.content.length));
 	return {
@@ -22,7 +25,6 @@ export function normalizeSelection(
 	const anchor = normalizePoint(blocks, selection.anchor);
 	const focus = normalizePoint(blocks, selection.focus);
 	if (!anchor || !focus) return null;
-
 	return {
 		anchor,
 		focus,

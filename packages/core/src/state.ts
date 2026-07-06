@@ -5,7 +5,7 @@ import {
 	EDITOR_STATE_SCHEMA_VERSION,
 	type EditorState,
 } from "./types";
-import { isBlockType, isRecord } from "./validation";
+import { isBlockType, isEditorState, isRecord } from "./validation";
 
 export function createEmptyState(): EditorState {
 	return {
@@ -60,4 +60,11 @@ export function toPlainText(value: EditorState): string {
 	return normalizeState(value)
 		.blocks.map((block) => block.content)
 		.join("\n");
+}
+
+export function validateState(value: unknown): EditorState {
+	if (!isEditorState(value)) {
+		throw new Error("Invalid state");
+	}
+	return value;
 }
