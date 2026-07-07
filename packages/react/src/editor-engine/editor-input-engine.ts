@@ -279,18 +279,13 @@ export class EditorInputEngine {
 				return;
 			}
 
-			this.editor.dispatch(
+			this.editor.replaceText(
+				command.blockId,
 				{
-					type: "replaceText",
-					payload: {
-						blockId: command.blockId,
-						range: {
-							start: command.offset,
-							end: command.offset,
-						},
-						text: command.text,
-					},
+					start: command.offset,
+					end: command.offset,
 				},
+				command.text,
 				{ history: "merge" },
 			);
 			return;
@@ -305,36 +300,26 @@ export class EditorInputEngine {
 			const { start, end } = command.range;
 
 			if (start !== end) {
-				this.editor.dispatch(
+				this.editor.replaceText(
+					command.blockId,
 					{
-						type: "replaceText",
-						payload: {
-							blockId: command.blockId,
-							range: {
-								start,
-								end,
-							},
-							text: "",
-						},
+						start,
+						end,
 					},
+					"",
 					{ history: "merge" },
 				);
 				return;
 			}
 
 			if (start > 0) {
-				this.editor.dispatch(
+				this.editor.replaceText(
+					command.blockId,
 					{
-						type: "replaceText",
-						payload: {
-							blockId: command.blockId,
-							range: {
-								start: start - 1,
-								end: start,
-							},
-							text: "",
-						},
+						start: start - 1,
+						end: start,
 					},
+					"",
 					{ history: "merge" },
 				);
 				return;
@@ -369,36 +354,26 @@ export class EditorInputEngine {
 			const { start, end } = command.range;
 
 			if (start !== end) {
-				this.editor.dispatch(
+				this.editor.replaceText(
+					command.blockId,
 					{
-						type: "replaceText",
-						payload: {
-							blockId: command.blockId,
-							range: {
-								start,
-								end,
-							},
-							text: "",
-						},
+						start,
+						end,
 					},
+					"",
 					{ history: "merge" },
 				);
 				return;
 			}
 
 			if (start < block.content.length) {
-				this.editor.dispatch(
+				this.editor.replaceText(
+					command.blockId,
 					{
-						type: "replaceText",
-						payload: {
-							blockId: command.blockId,
-							range: {
-								start,
-								end: start + 1,
-							},
-							text: "",
-						},
+						start,
+						end: start + 1,
 					},
+					"",
 					{ history: "merge" },
 				);
 				return;

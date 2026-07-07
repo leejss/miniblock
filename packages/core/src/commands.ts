@@ -41,7 +41,6 @@ export type EditorCommand = {
 	[T in CommandType]: {
 		type: T;
 		payload: CommandPayload<T>;
-		select?: SelectionEffect;
 	};
 }[CommandType];
 
@@ -59,6 +58,7 @@ export type CommandHandler<T extends CommandType = CommandType> = (
 
 export type HistoryPolicy = "record" | "skip" | "merge";
 
-export type DispatchOptions = {
+export type CommitOptions = {
 	history?: HistoryPolicy;
+	select?: SelectionEffect;
 };

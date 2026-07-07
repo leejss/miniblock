@@ -2,7 +2,7 @@ import { createBlock, normalizeBlock } from "./blocks";
 import type {
 	BlockPatch,
 	CommandResult,
-	DispatchOptions,
+	CommitOptions,
 	EditorCommand,
 	HistoryPolicy,
 	SelectionEffect,
@@ -101,13 +101,28 @@ export class MiniBlockCore {
 		}
 	}
 
-	updateBlock(id: string, patch: BlockPatch) {
-		this.dispatch(
-			{ type: "patchBlock", payload: { blockId: id, patch } },
-			{
-				history: "merge",
-			},
-		);
+	replaceText(
+		blockId: string,
+		range: TextRange,
+		text: string,
+		options: CommitOptions = {},
+	) {
+		const payload = { blockId, range, text };
+		const command: EditorCommand = { type: "replaceText", payload };
+		const result = replaceTextHandler(this.state, this.selection, payload);
+
+		this.commitCommandResult(command, result, options);
+	}
+
+	updateBlock(id: string, patch: BlockPatch, options: CommitOptions = {}) {
+		const payload = { blockId: id, patch };
+		const command: EditorCommand = { type: "patchBlock", payload };
+		const result = patchBlockHandler(this.state, this.selection, payload);
+
+		this.commitCommandResult(command, result, {
+			history: "merge",
+			...options,
+		});
 	}
 
 	private createSnapshot(): EditorSnapshot {
@@ -130,22 +145,20 @@ export class MiniBlockCore {
 		const block = this.state.blocks[index];
 
 		if (block.type === "bulletedListItem" && block.content === "") {
-			this.dispatch(
-				{
-					type: "patchBlock",
-					payload: {
-						blockId,
-						patch: {
-							type: "paragraph",
-							indent: undefined,
-						},
-					},
-					select: { type: "collapse", blockId, offset: 0 },
+			const payload = {
+				blockId,
+				patch: {
+					type: "paragraph" as const,
+					indent: undefined,
 				},
-				{
-					history: "record",
-				},
-			);
+			};
+			const command: EditorCommand = { type: "patchBlock", payload };
+			const result = patchBlockHandler(this.state, this.selection, payload);
+
+			this.commitCommandResult(command, result, {
+				history: "record",
+				select: { type: "collapse", blockId, offset: 0 },
+			});
 			return;
 		}
 
@@ -163,20 +176,18 @@ export class MiniBlockCore {
 			indent: block.type === "bulletedListItem" ? block.indent : undefined,
 		});
 
-		this.dispatch(
-			{
-				type: "spliceBlocks",
-				payload: {
-					index,
-					deleteCount: 1,
-					insert: [currentBlock, newBlock],
-				},
-				select: { type: "collapse", blockId: newBlockId },
-			},
-			{
-				history: "record",
-			},
-		);
+		const payload = {
+			index,
+			deleteCount: 1,
+			insert: [currentBlock, newBlock],
+		};
+		const command: EditorCommand = { type: "spliceBlocks", payload };
+		const result = spliceBlocksHandler(this.state, this.selection, payload);
+
+		this.commitCommandResult(command, result, {
+			history: "record",
+			select: { type: "collapse", blockId: newBlockId },
+		});
 	}
 
 	mergeBlockBackward(blockId: string) {
@@ -191,24 +202,22 @@ export class MiniBlockCore {
 			content: previousBlock.content + currentBlock.content,
 		});
 
-		this.dispatch(
-			{
-				type: "spliceBlocks",
-				payload: {
-					index: index - 1,
-					deleteCount: 2,
-					insert: [mergedBlock],
-				},
-				select: {
-					type: "collapse",
-					blockId: previousBlock.id,
-					offset,
-				},
+		const payload = {
+			index: index - 1,
+			deleteCount: 2,
+			insert: [mergedBlock],
+		};
+		const command: EditorCommand = { type: "spliceBlocks", payload };
+		const result = spliceBlocksHandler(this.state, this.selection, payload);
+
+		this.commitCommandResult(command, result, {
+			history: "record",
+			select: {
+				type: "collapse",
+				blockId: previousBlock.id,
+				offset,
 			},
-			{
-				history: "record",
-			},
-		);
+		});
 	}
 
 	deleteBlockBackward(blockId: string): void {
@@ -217,24 +226,22 @@ export class MiniBlockCore {
 
 		const previousBlock = this.state.blocks[index - 1];
 
-		this.dispatch(
-			{
-				type: "spliceBlocks",
-				payload: {
-					index,
-					deleteCount: 1,
-					insert: [],
-				},
-				select: {
-					type: "collapse",
-					blockId: previousBlock.id,
-					offset: previousBlock.content.length,
-				},
+		const payload = {
+			index,
+			deleteCount: 1,
+			insert: [],
+		};
+		const command: EditorCommand = { type: "spliceBlocks", payload };
+		const result = spliceBlocksHandler(this.state, this.selection, payload);
+
+		this.commitCommandResult(command, result, {
+			history: "record",
+			select: {
+				type: "collapse",
+				blockId: previousBlock.id,
+				offset: previousBlock.content.length,
 			},
-			{
-				history: "record",
-			},
-		);
+		});
 	}
 
 	changeBlockType(
@@ -251,19 +258,17 @@ export class MiniBlockCore {
 			patch.content = newContent;
 		}
 
-		this.dispatch(
-			{
-				type: "patchBlock",
-				payload: {
-					blockId,
-					patch,
-				},
-				select: { type: "collapse", blockId, offset: content.length },
-			},
-			{
-				history: "record",
-			},
-		);
+		const payload = {
+			blockId,
+			patch,
+		};
+		const command: EditorCommand = { type: "patchBlock", payload };
+		const result = patchBlockHandler(this.state, this.selection, payload);
+
+		this.commitCommandResult(command, result, {
+			history: "record",
+			select: { type: "collapse", blockId, offset: content.length },
+		});
 	}
 
 	undo() {
@@ -324,14 +329,20 @@ export class MiniBlockCore {
 		this.future = [];
 	}
 
-	dispatch(command: EditorCommand, options: DispatchOptions = {}) {
+	private commitCommandResult(
+		command: EditorCommand,
+		result: CommandResult,
+		options: CommitOptions = {},
+	) {
 		const selectionBefore = this.selection;
-		const result = this.applyCommand(this.state, selectionBefore, command);
-		const stateChanged = result.state !== this.state;
-		const selectionChanged = !isSelectionEqual(
+		const selection = applySelectionEffect(
+			result.state.blocks,
+			selectionBefore,
 			result.selection,
-			this.selection,
+			options.select,
 		);
+		const stateChanged = result.state !== this.state;
+		const selectionChanged = !isSelectionEqual(selection, this.selection);
 
 		if (!stateChanged && !selectionChanged) return;
 
@@ -343,14 +354,14 @@ export class MiniBlockCore {
 					command,
 					inverse: result.inverse,
 					selectionBefore,
-					selectionAfter: result.selection,
+					selectionAfter: selection,
 				},
 				history,
 			);
 		}
 
 		this.state = result.state;
-		this.selection = result.selection;
+		this.selection = selection;
 		this.snapshot = this.createSnapshot();
 		this.emit();
 	}
@@ -378,12 +389,7 @@ export class MiniBlockCore {
 
 		return {
 			...result,
-			selection: applySelectionEffect(
-				result.state.blocks,
-				selection,
-				result.selection,
-				command.select,
-			),
+			selection: normalizeSelection(result.state.blocks, result.selection),
 		};
 	}
 }
@@ -452,7 +458,6 @@ function mergeHistoryRecord(
 						...current.command.payload.patch,
 					},
 				},
-				select: current.command.select,
 			},
 			inverse: previous.inverse,
 			selectionBefore: previous.selectionBefore,
