@@ -1,49 +1,26 @@
 import { type EditorState, MiniBlockCore } from "@miniblock/core";
-import {
-	useEffect,
-	useLayoutEffect,
-	useRef,
-	useSyncExternalStore,
-} from "react";
+import { useRef, useSyncExternalStore } from "react";
 
 export type UseBlockEditorOptions = {
-	value?: EditorState;
 	defaultValue?: EditorState;
-	onChange?: (state: EditorState) => void;
 };
 
-export function useBlockEditor(options: UseBlockEditorOptions) {
-	const isControlled = options.value !== undefined;
+export function useBlockEditor(options: UseBlockEditorOptions = {}) {
 	const editorRef = useRef<MiniBlockCore | null>(null);
 	if (!editorRef.current) {
-		editorRef.current = new MiniBlockCore(
-			options.value ?? options.defaultValue,
-		);
+		editorRef.current = new MiniBlockCore(options.defaultValue);
 	}
 
 	const editor = editorRef.current;
 
 	const storedSnapshot = useSyncExternalStore(
-		(onStoreChange) => editor.subscribe(() => onStoreChange()),
+		(onStoreChange) => editor.subscribe(onStoreChange),
 		() => editor.getSnapshot(),
 		() => editor.getSnapshot(),
 	);
 
-	const state = options.value ?? storedSnapshot.state;
-	const selection = storedSnapshot.runtime.selection;
-
-	useLayoutEffect(() => {
-		if (!isControlled || !options.value) return;
-		editor.setState(options.value, { emit: false });
-	}, [isControlled, options.value, editor]);
-
-	useEffect(() => {
-		return editor.subscribe((snapshot, change) => {
-			if (change.stateChanged) {
-				options.onChange?.(snapshot.state);
-			}
-		});
-	}, [options.onChange, editor]);
+	const state = storedSnapshot.state;
+	const selection = storedSnapshot.selection;
 
 	return {
 		editor,

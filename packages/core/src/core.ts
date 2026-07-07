@@ -18,13 +18,12 @@ import { createCollapsedSelection, normalizeSelection } from "./selection";
 import { createEmptyState, normalizeState, validateState } from "./state";
 import type {
 	BlockType,
-	EditorChange,
 	EditorSelection,
 	EditorSnapshot,
 	EditorState,
 } from "./types";
 
-type Listener = (snapshot: EditorSnapshot, change: EditorChange) => void;
+type Listener = () => void;
 
 type HistoryRecord = {
 	command: EditorCommand;
@@ -59,8 +58,8 @@ export class MiniBlockCore {
 		this.selection = selection;
 		this.snapshot = this.createSnapshot();
 
-		if (options?.emit) {
-			this.emit({ stateChanged, selectionChanged });
+		if (options?.emit && (stateChanged || selectionChanged)) {
+			this.emit();
 		}
 	}
 
@@ -98,7 +97,7 @@ export class MiniBlockCore {
 		this.snapshot = this.createSnapshot();
 
 		if (options?.emit !== false) {
-			this.emit({ stateChanged: false, selectionChanged: true });
+			this.emit();
 		}
 	}
 
@@ -114,17 +113,13 @@ export class MiniBlockCore {
 	private createSnapshot(): EditorSnapshot {
 		return {
 			state: this.state,
-			runtime: {
-				selection: this.selection,
-			},
+			selection: this.selection,
 		};
 	}
 
-	private emit(change: EditorChange) {
-		if (!change.stateChanged && !change.selectionChanged) return;
-
+	private emit() {
 		for (const listener of this.listeners) {
-			listener(this.snapshot, change);
+			listener();
 		}
 	}
 
@@ -289,7 +284,7 @@ export class MiniBlockCore {
 		this.state = result.state;
 		this.selection = selection;
 		this.snapshot = this.createSnapshot();
-		this.emit({ stateChanged: true, selectionChanged: true });
+		this.emit();
 	}
 
 	redo() {
@@ -310,7 +305,7 @@ export class MiniBlockCore {
 		this.state = result.state;
 		this.selection = selection;
 		this.snapshot = this.createSnapshot();
-		this.emit({ stateChanged: true, selectionChanged: true });
+		this.emit();
 	}
 
 	private recordHistory(record: HistoryRecord, history: HistoryPolicy) {
@@ -357,7 +352,7 @@ export class MiniBlockCore {
 		this.state = result.state;
 		this.selection = result.selection;
 		this.snapshot = this.createSnapshot();
-		this.emit({ stateChanged, selectionChanged });
+		this.emit();
 	}
 
 	private applyCommand(

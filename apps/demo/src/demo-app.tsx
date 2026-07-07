@@ -37,7 +37,6 @@ const initialState: EditorState = {
 };
 
 export function App() {
-	const [state, setState] = useState(initialState);
 	const [theme, setTheme] = useState<"dark" | "light">("dark");
 
 	// Synchronize the body class for the outer demo shell styling
@@ -67,8 +66,7 @@ export function App() {
 
 			<div className="editor-wrapper">
 				<BlockEditor
-					value={state}
-					onChange={setState}
+					defaultValue={initialState}
 					className={theme === "light" ? "mb-editor--light" : ""}
 					placeholder="Press '/' for commands..."
 				/>
