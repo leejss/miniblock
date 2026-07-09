@@ -3,7 +3,10 @@ import {
 	type CSSProperties,
 	type ElementType,
 	forwardRef,
+	useCallback,
+	useEffect,
 	useImperativeHandle,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 } from "react";
@@ -13,8 +16,12 @@ import {
 	BlockEditorStateContext,
 } from "../hooks/use-block-editor-context";
 import { useEditorInputEvents } from "../hooks/use-editor-input-events";
-import { useEditorSelectionSync } from "../hooks/use-editor-selection-sync";
 import "../styles.css";
+import {
+	applySelectionToDom,
+	isSelectionEqual,
+	readSelectionFromDom,
+} from "../utils/dom-selection";
 import { SlashMenu } from "./slash-menu";
 
 export type BlockEditorProps = {
@@ -59,14 +66,39 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
 		const editorRootRef = useRef<HTMLDivElement | null>(null);
 		const blocksRef = useRef(new Map<string, HTMLElement>());
 		const isComposingRef = useRef(false);
-		const { syncSelectionFromDom } = useEditorSelectionSync({
-			blocksRef,
-			editorRootRef,
-			isComposingRef,
-			readOnly,
-			selection,
-			setSelection,
-		});
+
+		const syncSelectionFromDom = useCallback(() => {
+			setSelection(readSelectionFromDom(blocksRef.current));
+		}, [setSelection]);
+
+		useLayoutEffect(() => {
+			if (isComposingRef.current || !selection) return;
+
+			const currentDomSelection = readSelectionFromDom(blocksRef.current);
+			if (!isSelectionEqual(currentDomSelection, selection)) {
+				applySelectionToDom(blocksRef.current, selection);
+			}
+		}, [selection]);
+
+		useEffect(() => {
+			if (readOnly) return;
+
+			const handleSelectionChange = () => {
+				if (isComposingRef.current) return;
+				const domSelection = window.getSelection();
+				if (
+					domSelection &&
+					editorRootRef.current?.contains(domSelection.anchorNode)
+				) {
+					syncSelectionFromDom();
+				}
+			};
+
+			document.addEventListener("selectionchange", handleSelectionChange);
+			return () => {
+				document.removeEventListener("selectionchange", handleSelectionChange);
+			};
+		}, [readOnly, syncSelectionFromDom]);
 
 		const {
 			handleCompositionStart,

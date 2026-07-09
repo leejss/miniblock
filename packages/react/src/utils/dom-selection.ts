@@ -16,12 +16,12 @@ export function readSelectionFromDom(
 	const focusBlock = findBlockElement(blocksMap, selection.focusNode);
 	if (!anchorBlock || !focusBlock) return null;
 
-	const anchorOffset = getDomPointOffsetInBlock(
+	const anchorOffset = getBlockOffset(
 		anchorBlock.element,
 		selection.anchorNode,
 		selection.anchorOffset,
 	);
-	const focusOffset = getDomPointOffsetInBlock(
+	const focusOffset = getBlockOffset(
 		focusBlock.element,
 		selection.focusNode,
 		selection.focusOffset,
@@ -78,6 +78,7 @@ export function getCollapsedOffsetInBlock(
 	blockElement: HTMLElement,
 	selection: Selection | null,
 ) {
+	if (!selection) return null;
 	const range = getSelectionRangeInBlock(blockElement, selection);
 	if (!range || range.start !== range.end) return null;
 	return range.start;
@@ -87,24 +88,26 @@ export function getSelectionRangeInBlock(
 	blockElement: HTMLElement,
 	selection: Selection | null,
 ): TextRange | null {
-	if (!selection || selection.rangeCount === 0) return null;
+	if (!selection) return null;
+	if (selection.rangeCount === 0) return null;
 	if (!selection.anchorNode || !selection.focusNode) return null;
+	// TODO: 만약 셀렉션이 여러 블록에 걸쳐 있다면?
 	if (!isNodeInsideElement(blockElement, selection.anchorNode)) return null;
 	if (!isNodeInsideElement(blockElement, selection.focusNode)) return null;
 
-	const anchorOffset = getDomPointOffsetInBlock(
+	const anchorOffset = getBlockOffset(
 		blockElement,
 		selection.anchorNode,
 		selection.anchorOffset,
 	);
+	if (anchorOffset === null) return null;
 
-	const focusOffset = getDomPointOffsetInBlock(
+	const focusOffset = getBlockOffset(
 		blockElement,
 		selection.focusNode,
 		selection.focusOffset,
 	);
-
-	if (anchorOffset === null || focusOffset === null) return null;
+	if (focusOffset === null) return null;
 
 	return {
 		start: Math.min(anchorOffset, focusOffset),
@@ -116,7 +119,7 @@ export function getCaretOffsetWithinBlock(blockElement: HTMLElement): number {
 	const selection = window.getSelection();
 	if (!selection || selection.rangeCount === 0) return 0;
 
-	const offset = getDomPointOffsetInBlock(
+	const offset = getBlockOffset(
 		blockElement,
 		selection.getRangeAt(0).startContainer,
 		selection.getRangeAt(0).startOffset,
@@ -156,14 +159,10 @@ function isNodeInsideElement(element: HTMLElement, node: Node) {
 	return element.contains(node);
 }
 
-function getDomPointOffsetInBlock(
-	blockElement: HTMLElement,
-	node: Node,
-	offset: number,
-) {
+// 블록 전체 텍스트 기준 offset으로 변환하는 함수
+function getBlockOffset(blockElement: HTMLElement, node: Node, offset: number) {
 	const range = document.createRange();
 	range.selectNodeContents(blockElement);
-
 	try {
 		range.setEnd(node, offset);
 		const contentLength = blockElement.textContent?.length ?? 0;

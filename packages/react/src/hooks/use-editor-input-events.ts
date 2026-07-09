@@ -1,6 +1,10 @@
 import type { MiniBlockCore } from "@miniblock/core";
 import { type RefObject, useCallback, useLayoutEffect, useMemo } from "react";
-import { EditorInputEngine } from "../editor-engine/editor-input-engine";
+import {
+	applyInputIntent,
+	EditorInputEngine,
+	getInputIntent,
+} from "../editor-engine/editor-input-engine";
 import type { KeyDownInterceptor } from "./use-block-editor-context";
 
 type UseEditorInputEventsOptions = {
@@ -18,19 +22,13 @@ export function useEditorInputEvents({
 	readOnly,
 	syncSelectionFromDom,
 }: UseEditorInputEventsOptions) {
-	// biome-ignore lint/correctness/useExhaustiveDependencies: engine is stable and updated imperatively below
 	const engine = useMemo(() => {
 		return new EditorInputEngine({
 			editor,
 			readOnly,
 			syncSelectionFromDom,
 		});
-	}, [editor]);
-
-	// Keep engine options up to date when readOnly or callback changes
-	useLayoutEffect(() => {
-		engine.updateOptions({ readOnly, syncSelectionFromDom });
-	}, [engine, readOnly, syncSelectionFromDom]);
+	}, [editor, readOnly, syncSelectionFromDom]);
 
 	// Delegate React component events to native handlers in engine
 	const handleCompositionStart = useCallback(() => {
@@ -89,23 +87,22 @@ export function useEditorInputEvents({
 		const root = editorRootRef.current;
 		if (!root) return;
 
-		const listener = (event: Event) => {
-			const inputEvent = event as InputEvent;
-			engine.handleBeforeInput({
-				inputType: inputEvent.inputType,
-				data: inputEvent.data,
-				target: inputEvent.target,
-				isComposing: inputEvent.isComposing,
-				preventDefault: () => inputEvent.preventDefault(),
+		const listener = (event: InputEvent) => {
+			const intent = getInputIntent({
+				event,
+				isComposing: isComposingRef.current || event.isComposing,
+				readOnly,
 			});
+			if (!intent) return;
+			event.preventDefault();
+			applyInputIntent(editor, intent);
 		};
 
 		root.addEventListener("beforeinput", listener);
-
 		return () => {
 			root.removeEventListener("beforeinput", listener);
 		};
-	}, [editorRootRef, engine]);
+	}, [editorRootRef, editor, isComposingRef, readOnly]);
 
 	return {
 		handleCompositionStart,

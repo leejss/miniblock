@@ -1,6 +1,5 @@
 import { MAX_BULLET_INDENT, type MiniBlockCore } from "@miniblock/core";
 import type { KeyDownInterceptor } from "../hooks/use-block-editor-context";
-import { findClosestBlockElement } from "../utils/dom-block";
 import {
 	getCaretOffsetWithinBlock,
 	getCollapsedOffsetInBlock,
@@ -32,6 +31,12 @@ export interface BeforeInputInfo {
 	isComposing: boolean;
 }
 
+export type EditorInputEventSource = {
+	event: InputEvent;
+	isComposing: boolean;
+	readOnly?: boolean;
+};
+
 export interface TargetInputInfo {
 	target: EventTarget | null;
 	isComposing: boolean;
@@ -58,6 +63,12 @@ export type InputIntent =
 			type: "deleteForward";
 			blockId: string;
 			range: TextRange;
+	  }
+	| {
+			type: "historyUndo";
+	  }
+	| {
+			type: "historyRedo";
 	  };
 
 export interface EditorInputEngineOptions {
@@ -79,18 +90,6 @@ export class EditorInputEngine {
 		this.syncSelectionFromDom = options.syncSelectionFromDom;
 	}
 
-	updateOptions(options: Partial<EditorInputEngineOptions>) {
-		if (options.editor !== undefined) {
-			this.editor = options.editor;
-		}
-		if (options.readOnly !== undefined) {
-			this.readOnly = options.readOnly;
-		}
-		if (options.syncSelectionFromDom !== undefined) {
-			this.syncSelectionFromDom = options.syncSelectionFromDom;
-		}
-	}
-
 	getIsComposing() {
 		return this.isComposing;
 	}
@@ -100,83 +99,6 @@ export class EditorInputEngine {
 		return () => {
 			this.interceptors.delete(interceptor);
 		};
-	}
-
-	handleBeforeInput(info: BeforeInputInfo) {
-		if (this.readOnly) return;
-		if (this.isComposing || info.isComposing) return;
-		if (isCompositionInput(info.inputType)) return;
-
-		const blockElement = findClosestBlockElement(info.target);
-		const blockId = blockElement?.dataset.blockId;
-		if (!blockElement || !blockId) return;
-
-		const selection = window.getSelection();
-
-		if (info.inputType === "historyUndo") {
-			info.preventDefault();
-			this.editor.undo();
-			return;
-		}
-
-		if (info.inputType === "historyRedo") {
-			info.preventDefault();
-			this.editor.redo();
-			return;
-		}
-
-		if (info.inputType === "insertText") {
-			const offset = getCollapsedOffsetInBlock(blockElement, selection);
-			const text = info.data;
-			if (offset === null || !text) return;
-
-			info.preventDefault();
-			this.handleInputIntent({
-				type: "insertText",
-				blockId,
-				offset,
-				text,
-			});
-			return;
-		}
-
-		if (info.inputType === "insertParagraph") {
-			const offset = getCollapsedOffsetInBlock(blockElement, selection);
-			if (offset === null) return;
-
-			info.preventDefault();
-			this.handleInputIntent({
-				type: "splitBlock",
-				blockId,
-				offset,
-			});
-			return;
-		}
-
-		if (info.inputType === "deleteContentBackward") {
-			const range = getSelectionRangeInBlock(blockElement, selection);
-			if (!range) return;
-
-			info.preventDefault();
-			this.handleInputIntent({
-				type: "deleteBackward",
-				blockId,
-				range,
-			});
-			return;
-		}
-
-		if (info.inputType === "deleteContentForward") {
-			const range = getSelectionRangeInBlock(blockElement, selection);
-			if (!range) return;
-
-			info.preventDefault();
-			this.handleInputIntent({
-				type: "deleteForward",
-				blockId,
-				range,
-			});
-		}
 	}
 
 	handleCompositionStart() {
@@ -259,132 +181,6 @@ export class EditorInputEngine {
 		}
 
 		this.editor.updateBlock(blockId, { content });
-	}
-
-	private handleInputIntent(command: InputIntent) {
-		const blocks = this.editor.getBlocks();
-		const block = blocks.find((b) => b.id === command.blockId);
-		if (!block) return;
-
-		if (command.type === "insertText") {
-			const nextContent = insertTextAt(
-				block.content,
-				command.offset,
-				command.text,
-			);
-			const shortcut = matchTextShortcut(nextContent);
-
-			if (shortcut) {
-				this.editor.changeBlockType(command.blockId, shortcut.type, "");
-				return;
-			}
-
-			this.editor.replaceText(
-				command.blockId,
-				{
-					start: command.offset,
-					end: command.offset,
-				},
-				command.text,
-				{ history: "merge" },
-			);
-			return;
-		}
-
-		if (command.type === "splitBlock") {
-			this.editor.splitBlock(command.blockId, command.offset);
-			return;
-		}
-
-		if (command.type === "deleteBackward") {
-			const { start, end } = command.range;
-
-			if (start !== end) {
-				this.editor.replaceText(
-					command.blockId,
-					{
-						start,
-						end,
-					},
-					"",
-					{ history: "merge" },
-				);
-				return;
-			}
-
-			if (start > 0) {
-				this.editor.replaceText(
-					command.blockId,
-					{
-						start: start - 1,
-						end: start,
-					},
-					"",
-					{ history: "merge" },
-				);
-				return;
-			}
-
-			if (block.type === "bulletedListItem") {
-				const currentIndent = block.indent ?? 0;
-				if (currentIndent > 0) {
-					this.editor.updateBlock(command.blockId, {
-						indent: currentIndent - 1,
-					});
-				} else {
-					this.editor.changeBlockType(
-						command.blockId,
-						"paragraph",
-						block.content,
-					);
-				}
-				return;
-			}
-
-			if (block.content.length === 0) {
-				this.editor.deleteBlockBackward(command.blockId);
-			} else {
-				this.editor.mergeBlockBackward(command.blockId);
-			}
-
-			return;
-		}
-
-		if (command.type === "deleteForward") {
-			const { start, end } = command.range;
-
-			if (start !== end) {
-				this.editor.replaceText(
-					command.blockId,
-					{
-						start,
-						end,
-					},
-					"",
-					{ history: "merge" },
-				);
-				return;
-			}
-
-			if (start < block.content.length) {
-				this.editor.replaceText(
-					command.blockId,
-					{
-						start,
-						end: start + 1,
-					},
-					"",
-					{ history: "merge" },
-				);
-				return;
-			}
-
-			const blockIndex = blocks.findIndex((b) => b.id === command.blockId);
-			const nextBlock = blocks[blockIndex + 1];
-			if (nextBlock) {
-				this.editor.mergeBlockBackward(nextBlock.id);
-			}
-		}
 	}
 
 	private handleHistoryShortcut(info: KeyboardInputInfo): boolean {
@@ -487,5 +283,217 @@ export class EditorInputEngine {
 		});
 
 		return true;
+	}
+}
+
+const SUPPORTED_INPUT_TYPES = new Set<string>([
+	"insertText",
+	"insertParagraph",
+	"deleteContentBackward",
+	"deleteContentForward",
+	"historyUndo",
+	"historyRedo",
+]);
+function findClosestBlockElement(target: EventTarget | null) {
+	if (!(target instanceof Node)) return null;
+
+	const element = target instanceof HTMLElement ? target : target.parentElement;
+	return element?.closest<HTMLElement>("[data-block-id]") ?? null;
+}
+function isInputTypeSupported(inputType: string): boolean {
+	return SUPPORTED_INPUT_TYPES.has(inputType);
+}
+
+export function getInputIntent(
+	source: EditorInputEventSource,
+): InputIntent | null {
+	const inputType = source.event.inputType;
+	const data = source.event.data;
+	const target = source.event.target;
+	if (source.readOnly) return null;
+	if (source.isComposing) return null;
+	if (!isInputTypeSupported(inputType)) return null;
+	if (isCompositionInput(inputType)) return null;
+
+	if (inputType === "historyUndo") {
+		return { type: "historyUndo" };
+	}
+
+	if (inputType === "historyRedo") {
+		return { type: "historyRedo" };
+	}
+
+	const blockElement = findClosestBlockElement(target);
+	if (!blockElement) return null;
+	const blockId = blockElement.dataset.blockId;
+	if (!blockId) return null;
+
+	const selection = window.getSelection();
+	if (!selection) return null;
+
+	if (inputType === "insertText") {
+		const offset = getCollapsedOffsetInBlock(blockElement, selection);
+		const text = data;
+		if (offset === null || !text) return null;
+
+		return {
+			type: "insertText",
+			blockId,
+			offset,
+			text,
+		};
+	}
+
+	if (inputType === "insertParagraph") {
+		const offset = getCollapsedOffsetInBlock(blockElement, selection);
+		if (offset === null) return null;
+
+		return {
+			type: "splitBlock",
+			blockId,
+			offset,
+		};
+	}
+
+	if (inputType === "deleteContentBackward") {
+		const range = getSelectionRangeInBlock(blockElement, selection);
+		if (!range) return null;
+
+		return {
+			type: "deleteBackward",
+			blockId,
+			range,
+		};
+	}
+
+	if (inputType === "deleteContentForward") {
+		const range = getSelectionRangeInBlock(blockElement, selection);
+		if (!range) return null;
+
+		return {
+			type: "deleteForward",
+			blockId,
+			range,
+		};
+	}
+
+	return null;
+}
+
+export function applyInputIntent(
+	editor: MiniBlockCore,
+	intent: InputIntent,
+): void {
+	if (intent.type === "historyUndo") {
+		editor.undo();
+		return;
+	}
+
+	if (intent.type === "historyRedo") {
+		editor.redo();
+		return;
+	}
+
+	const blocks = editor.getBlocks();
+	const block = blocks.find((b) => b.id === intent.blockId);
+	if (!block) return;
+
+	if (intent.type === "insertText") {
+		const nextContent = insertTextAt(block.content, intent.offset, intent.text);
+		const shortcut = matchTextShortcut(nextContent);
+		if (shortcut) {
+			editor.changeBlockType(intent.blockId, shortcut.type, "");
+			return;
+		}
+
+		editor.replaceText(
+			intent.blockId,
+			{
+				start: intent.offset,
+				end: intent.offset,
+			},
+			intent.text,
+			{ history: "merge" },
+		);
+		return;
+	}
+
+	if (intent.type === "splitBlock") {
+		editor.splitBlock(intent.blockId, intent.offset);
+		return;
+	}
+
+	if (intent.type === "deleteBackward") {
+		const { start, end } = intent.range;
+
+		if (start !== end) {
+			editor.replaceText(intent.blockId, { start, end }, "", {
+				history: "merge",
+			});
+			return;
+		}
+
+		if (start > 0) {
+			editor.replaceText(
+				intent.blockId,
+				{
+					start: start - 1,
+					end: start,
+				},
+				"",
+				{ history: "merge" },
+			);
+			return;
+		}
+
+		if (block.type === "bulletedListItem") {
+			const currentIndent = block.indent ?? 0;
+			if (currentIndent > 0) {
+				editor.updateBlock(intent.blockId, {
+					indent: currentIndent - 1,
+				});
+			} else {
+				editor.changeBlockType(intent.blockId, "paragraph", block.content);
+			}
+			return;
+		}
+
+		if (block.content.length === 0) {
+			editor.deleteBlockBackward(intent.blockId);
+		} else {
+			editor.mergeBlockBackward(intent.blockId);
+		}
+
+		return;
+	}
+
+	if (intent.type === "deleteForward") {
+		const { start, end } = intent.range;
+
+		if (start !== end) {
+			editor.replaceText(intent.blockId, { start, end }, "", {
+				history: "merge",
+			});
+			return;
+		}
+
+		if (start < block.content.length) {
+			editor.replaceText(
+				intent.blockId,
+				{
+					start,
+					end: start + 1,
+				},
+				"",
+				{ history: "merge" },
+			);
+			return;
+		}
+
+		const blockIndex = blocks.findIndex((b) => b.id === intent.blockId);
+		const nextBlock = blocks[blockIndex + 1];
+		if (nextBlock) {
+			editor.mergeBlockBackward(nextBlock.id);
+		}
 	}
 }
