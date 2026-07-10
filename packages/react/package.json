@@ -5,15 +5,20 @@
 	"main": "./dist/miniblock-react.cjs",
 	"module": "./dist/miniblock-react.js",
 	"types": "./dist/index.d.ts",
+	"files": [
+		"dist"
+	],
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
 			"import": "./dist/miniblock-react.js",
 			"require": "./dist/miniblock-react.cjs"
-		}
+		},
+		"./styles.css": "./dist/react.css"
 	},
 	"scripts": {
-		"build": "vite build"
+		"build": "vite build",
+		"prepack": "pnpm build"
 	},
 	"peerDependencies": {
 		"react": "^18.0.0 || ^19.0.0",

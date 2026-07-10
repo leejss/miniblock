@@ -5,6 +5,9 @@
 	"main": "./dist/miniblock-core.cjs",
 	"module": "./dist/miniblock-core.js",
 	"types": "./dist/index.d.ts",
+	"files": [
+		"dist"
+	],
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
@@ -13,7 +16,8 @@
 		}
 	},
 	"scripts": {
-		"build": "vite build"
+		"build": "vite build",
+		"prepack": "pnpm build"
 	},
 	"devDependencies": {
 		"@types/node": "^25.9.1",
