@@ -1,10 +1,9 @@
 import type { BlockType } from "@miniblock/core";
-import { useEffect } from "react";
-import {
-	useBlockEditorActions,
-	useBlockEditorState,
-} from "../hooks/use-block-editor-context";
+import type { EditorDomAdapter } from "@miniblock/dom";
+import { useEffect, useMemo } from "react";
+import { useStore } from "zustand";
 import { useSlashMenu } from "../hooks/use-slash-menu";
+import type { BlockEditorStoreApi } from "../stores/block-editor-store";
 import { matchSlashTrigger } from "../utils/slash-trigger";
 
 const COMMAND_ICONS: Record<BlockType, React.ReactNode> = {
@@ -123,9 +122,26 @@ const COMMAND_ICONS: Record<BlockType, React.ReactNode> = {
 	),
 };
 
-export function SlashMenu() {
-	const { selection, blocks, readOnly } = useBlockEditorState();
-	const { editor, dom } = useBlockEditorActions();
+type SlashMenuProps = {
+	store: BlockEditorStoreApi;
+	dom: EditorDomAdapter;
+	readOnly: boolean;
+};
+
+export function SlashMenu({ store, dom, readOnly }: SlashMenuProps) {
+	const selection = useStore(
+		store,
+		(storeState) => storeState.snapshot.selection,
+	);
+	const blocks = useStore(
+		store,
+		(storeState) => storeState.snapshot.state.blocks,
+	);
+	const editor = useStore(store, (storeState) => storeState.editor);
+	const changeBlockType = useMemo(
+		() => editor.changeBlockType.bind(editor),
+		[editor],
+	);
 
 	const {
 		menuState: slashMenu,
@@ -134,7 +150,7 @@ export function SlashMenu() {
 		closeMenu,
 		selectItem: selectSlashItem,
 		handleKeyDown: handleSlashKeyDown,
-	} = useSlashMenu(editor.changeBlockType.bind(editor));
+	} = useSlashMenu(changeBlockType);
 
 	useEffect(() => {
 		if (readOnly) {

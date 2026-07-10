@@ -5,14 +5,10 @@ import {
 	forwardRef,
 	useImperativeHandle,
 	useLayoutEffect,
-	useMemo,
 	useRef,
 } from "react";
-import { useBlockEditor } from "../hooks/use-block-editor";
-import {
-	BlockEditorActionsContext,
-	BlockEditorStateContext,
-} from "../hooks/use-block-editor-context";
+import { useStore } from "zustand";
+import { useBlockEditorStoreApi } from "../hooks/use-block-editor";
 import "../styles.css";
 import { EditorBlock } from "./editor-block";
 import { SlashMenu } from "./slash-menu";
@@ -34,9 +30,18 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
 		{ defaultValue, className, placeholder, readOnly, style },
 		ref,
 	) {
-		const { editor, blocks, selection } = useBlockEditor({
+		const store = useBlockEditorStoreApi({
 			defaultValue,
 		});
+		const editor = useStore(store, (storeState) => storeState.editor);
+		const blocks = useStore(
+			store,
+			(storeState) => storeState.snapshot.state.blocks,
+		);
+		const selection = useStore(
+			store,
+			(storeState) => storeState.snapshot.selection,
+		);
 		const domAdapterRef = useRef<EditorDomAdapter | null>(null);
 		if (!domAdapterRef.current) {
 			domAdapterRef.current = new EditorDomAdapter(editor, { readOnly });
@@ -70,47 +75,30 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
 			dom.syncSelectionToDom();
 		}, [dom, selection]);
 
-		const stateValue = useMemo(
-			() => ({ selection, blocks, readOnly: !!readOnly }),
-			[selection, blocks, readOnly],
-		);
-
-		const actionsValue = useMemo(
-			() => ({
-				editor,
-				dom,
-			}),
-			[editor, dom],
-		);
-
 		return (
-			<BlockEditorStateContext.Provider value={stateValue}>
-				<BlockEditorActionsContext.Provider value={actionsValue}>
-					<div
-						className={["mb-editor", className].filter(Boolean).join(" ")}
-						style={style}
-					>
-						<div ref={editorRootRef} className="mb-editor__page">
-							{blocks.map((block) => {
-								const showPlaceholder =
-									Boolean(placeholder) &&
-									blocks.length === 1 &&
-									block.content.length === 0;
-								return (
-									<EditorBlock
-										key={block.id}
-										block={block}
-										dom={dom}
-										readOnly={!!readOnly}
-										placeholder={showPlaceholder ? placeholder : undefined}
-									/>
-								);
-							})}
-							<SlashMenu />
-						</div>
-					</div>
-				</BlockEditorActionsContext.Provider>
-			</BlockEditorStateContext.Provider>
+			<div
+				className={["mb-editor", className].filter(Boolean).join(" ")}
+				style={style}
+			>
+				<div ref={editorRootRef} className="mb-editor__page">
+					{blocks.map((block) => {
+						const showPlaceholder =
+							Boolean(placeholder) &&
+							blocks.length === 1 &&
+							block.content.length === 0;
+						return (
+							<EditorBlock
+								key={block.id}
+								block={block}
+								dom={dom}
+								readOnly={!!readOnly}
+								placeholder={showPlaceholder ? placeholder : undefined}
+							/>
+						);
+					})}
+					<SlashMenu store={store} dom={dom} readOnly={!!readOnly} />
+				</div>
+			</div>
 		);
 	},
 );
