@@ -1,6 +1,6 @@
 import type { BlockType } from "@miniblock/core";
+import type { BlockLayout } from "@miniblock/dom";
 import { useCallback, useState } from "react";
-import type { KeyboardInputInfo } from "../editor-engine/editor-input-engine";
 import { blockCommands } from "../utils/block-commands";
 
 export type SlashMenuState = {
@@ -25,8 +25,7 @@ export function useSlashMenu(
 		: [];
 
 	const openMenu = useCallback(
-		(blockId: string, query: string, element: HTMLElement) => {
-			const { offsetHeight, offsetLeft, offsetTop } = element;
+		(blockId: string, query: string, layout: BlockLayout) => {
 			setMenuState((prev) => {
 				const prevActiveIndex =
 					prev?.blockId === blockId ? prev.activeIndex : 0;
@@ -47,8 +46,8 @@ export function useSlashMenu(
 					blockId,
 					activeIndex: nextActiveIndex,
 					query,
-					top: offsetTop + offsetHeight + 4,
-					left: offsetLeft,
+					top: layout.top + layout.height + 4,
+					left: layout.left,
 				};
 			});
 		},
@@ -60,9 +59,8 @@ export function useSlashMenu(
 	}, []);
 
 	const selectItem = useCallback(
-		(type: BlockType, blockElement: HTMLElement | null) => {
+		(type: BlockType, content: string) => {
 			if (!menuState) return;
-			const content = blockElement?.textContent ?? "";
 
 			// 입력된 텍스트 중 슬래시 트리거 및 쿼리 부분을 제거합니다.
 			// 예: " /h1" -> " ", "/h1" -> "", "/h" -> ""
@@ -80,7 +78,7 @@ export function useSlashMenu(
 	);
 
 	const handleKeyDown = useCallback(
-		(event: KeyboardInputInfo, blockElement: HTMLElement | null) => {
+		(event: KeyboardEvent, blockContent: string) => {
 			if (!menuState) return false;
 
 			const moveActive = (direction: 1 | -1) => {
@@ -105,7 +103,7 @@ export function useSlashMenu(
 					const activeCommand = filteredCommands[menuState.activeIndex];
 
 					if (activeCommand) {
-						selectItem(activeCommand.type, blockElement);
+						selectItem(activeCommand.type, blockContent);
 					}
 				},
 				Escape: closeMenu,

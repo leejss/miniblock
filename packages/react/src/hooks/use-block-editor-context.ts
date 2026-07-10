@@ -3,19 +3,8 @@ import type {
 	EditorState,
 	MiniBlockCore,
 } from "@miniblock/core";
-import { createContext, type RefObject, useContext } from "react";
-
-import type { KeyboardInputInfo } from "../editor-engine/editor-input-engine";
-
-export type KeyDownInterceptorContext = {
-	blockId: string;
-	blockElement: HTMLElement;
-};
-
-export type KeyDownInterceptor = (
-	info: KeyboardInputInfo,
-	context: KeyDownInterceptorContext,
-) => boolean;
+import type { EditorDomAdapter } from "@miniblock/dom";
+import { createContext, useContext } from "react";
 
 export interface BlockEditorStateContextType {
 	selection: EditorSelection | null;
@@ -25,8 +14,7 @@ export interface BlockEditorStateContextType {
 
 export interface BlockEditorActionsContextType {
 	editor: MiniBlockCore;
-	blocksRef: RefObject<Map<string, HTMLElement>>;
-	registerKeyDownInterceptor: (interceptor: KeyDownInterceptor) => () => void;
+	dom: EditorDomAdapter;
 }
 
 export const BlockEditorStateContext =

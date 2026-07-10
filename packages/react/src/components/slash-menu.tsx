@@ -125,8 +125,7 @@ const COMMAND_ICONS: Record<BlockType, React.ReactNode> = {
 
 export function SlashMenu() {
 	const { selection, blocks, readOnly } = useBlockEditorState();
-	const { editor, blocksRef, registerKeyDownInterceptor } =
-		useBlockEditorActions();
+	const { editor, dom } = useBlockEditorActions();
 
 	const {
 		menuState: slashMenu,
@@ -170,27 +169,29 @@ export function SlashMenu() {
 			return;
 		}
 
-		const element = blocksRef.current?.get(blockId);
-		if (element) {
-			openMenu(blockId, triggerMatch.query, element);
+		const layout = dom.getBlockLayout(blockId);
+		if (layout) {
+			openMenu(blockId, triggerMatch.query, layout);
 		} else {
 			closeMenu();
 		}
-	}, [selection, blocks, openMenu, closeMenu, readOnly, blocksRef]);
+	}, [selection, blocks, openMenu, closeMenu, readOnly, dom]);
 
 	useEffect(() => {
 		if (!slashMenu) return;
 
-		const unregister = registerKeyDownInterceptor((event, context) => {
+		const unregister = dom.registerKeyDownInterceptor((event, context) => {
 			if (context.blockId !== slashMenu.blockId) {
 				return false;
 			}
 
-			return handleSlashKeyDown(event, context.blockElement);
+			const blockContent =
+				blocks.find((block) => block.id === context.blockId)?.content ?? "";
+			return handleSlashKeyDown(event, blockContent);
 		});
 
 		return unregister;
-	}, [slashMenu, handleSlashKeyDown, registerKeyDownInterceptor]);
+	}, [slashMenu, blocks, handleSlashKeyDown, dom]);
 
 	if (!slashMenu || filteredCommands.length === 0) {
 		return null;
@@ -208,10 +209,10 @@ export function SlashMenu() {
 					className={index === slashMenu.activeIndex ? "active" : ""}
 					onMouseDown={(event) => {
 						event.preventDefault();
-						selectSlashItem(
-							item.type,
-							blocksRef.current?.get(slashMenu.blockId) ?? null,
-						);
+						const blockContent =
+							blocks.find((block) => block.id === slashMenu.blockId)?.content ??
+							"";
+						selectSlashItem(item.type, blockContent);
 					}}
 				>
 					<span className="mb-slash-menu__item-icon">

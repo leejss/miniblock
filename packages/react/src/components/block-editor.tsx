@@ -1,10 +1,8 @@
-import type { BlockType, EditorState } from "@miniblock/core";
+import type { EditorState } from "@miniblock/core";
+import { EditorDomAdapter } from "@miniblock/dom";
 import {
 	type CSSProperties,
-	type ElementType,
 	forwardRef,
-	useCallback,
-	useEffect,
 	useImperativeHandle,
 	useLayoutEffect,
 	useMemo,
@@ -15,13 +13,8 @@ import {
 	BlockEditorActionsContext,
 	BlockEditorStateContext,
 } from "../hooks/use-block-editor-context";
-import { useEditorInputEvents } from "../hooks/use-editor-input-events";
 import "../styles.css";
-import {
-	applySelectionToDom,
-	isSelectionEqual,
-	readSelectionFromDom,
-} from "../utils/dom-selection";
+import { EditorBlock } from "./editor-block";
 import { SlashMenu } from "./slash-menu";
 
 export type BlockEditorProps = {
@@ -36,24 +29,20 @@ export type BlockEditorHandle = {
 	getState: () => EditorState;
 };
 
-const BLOCK_TAG_BY_TYPE: Record<BlockType, ElementType> = {
-	paragraph: "p",
-	heading1: "h1",
-	heading2: "h2",
-	heading3: "h3",
-	quote: "blockquote",
-	codeBlock: "pre",
-	bulletedListItem: "div",
-};
-
 export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
 	function BlockEditor(
 		{ defaultValue, className, placeholder, readOnly, style },
 		ref,
 	) {
-		const { editor, blocks, selection, setSelection } = useBlockEditor({
+		const { editor, blocks, selection } = useBlockEditor({
 			defaultValue,
 		});
+		const domAdapterRef = useRef<EditorDomAdapter | null>(null);
+		if (!domAdapterRef.current) {
+			domAdapterRef.current = new EditorDomAdapter(editor, { readOnly });
+		}
+		const dom = domAdapterRef.current;
+		const editorRootRef = useRef<HTMLDivElement | null>(null);
 
 		useImperativeHandle(
 			ref,
@@ -63,56 +52,23 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
 			[editor],
 		);
 
-		const editorRootRef = useRef<HTMLDivElement | null>(null);
-		const blocksRef = useRef(new Map<string, HTMLElement>());
-		const isComposingRef = useRef(false);
+		useLayoutEffect(() => {
+			const root = editorRootRef.current;
+			if (!root) return;
 
-		const syncSelectionFromDom = useCallback(() => {
-			setSelection(readSelectionFromDom(blocksRef.current));
-		}, [setSelection]);
+			dom.connect(root);
+			return () => dom.disconnect();
+		}, [dom]);
 
 		useLayoutEffect(() => {
-			if (isComposingRef.current || !selection) return;
+			dom.setReadOnly(!!readOnly);
+		}, [dom, readOnly]);
 
-			const currentDomSelection = readSelectionFromDom(blocksRef.current);
-			if (!isSelectionEqual(currentDomSelection, selection)) {
-				applySelectionToDom(blocksRef.current, selection);
-			}
-		}, [selection]);
-
-		useEffect(() => {
-			if (readOnly) return;
-
-			const handleSelectionChange = () => {
-				if (isComposingRef.current) return;
-				const domSelection = window.getSelection();
-				if (
-					domSelection &&
-					editorRootRef.current?.contains(domSelection.anchorNode)
-				) {
-					syncSelectionFromDom();
-				}
-			};
-
-			document.addEventListener("selectionchange", handleSelectionChange);
-			return () => {
-				document.removeEventListener("selectionchange", handleSelectionChange);
-			};
-		}, [readOnly, syncSelectionFromDom]);
-
-		const {
-			handleCompositionStart,
-			handleCompositionEnd,
-			handleInput,
-			handleKeyDown,
-			registerKeyDownInterceptor,
-		} = useEditorInputEvents({
-			editor,
-			editorRootRef,
-			isComposingRef,
-			readOnly,
-			syncSelectionFromDom,
-		});
+		// Core selection changes are the signal to apply the latest snapshot after render.
+		// biome-ignore lint/correctness/useExhaustiveDependencies: selection intentionally triggers this DOM synchronization
+		useLayoutEffect(() => {
+			dom.syncSelectionToDom();
+		}, [dom, selection]);
 
 		const stateValue = useMemo(
 			() => ({ selection, blocks, readOnly: !!readOnly }),
@@ -122,10 +78,9 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
 		const actionsValue = useMemo(
 			() => ({
 				editor,
-				blocksRef,
-				registerKeyDownInterceptor,
+				dom,
 			}),
-			[editor, registerKeyDownInterceptor],
+			[editor, dom],
 		);
 
 		return (
@@ -135,50 +90,19 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
 						className={["mb-editor", className].filter(Boolean).join(" ")}
 						style={style}
 					>
-						{/* biome-ignore lint/a11y/noStaticElementInteractions: delegated event handler container */}
-						<div
-							ref={editorRootRef}
-							className="mb-editor__page"
-							onCompositionStart={handleCompositionStart}
-							onCompositionEnd={handleCompositionEnd}
-							onInput={handleInput}
-							onKeyDown={handleKeyDown}
-						>
+						<div ref={editorRootRef} className="mb-editor__page">
 							{blocks.map((block) => {
-								const BlockTag = BLOCK_TAG_BY_TYPE[block.type];
-								const indent = block.indent ?? 0;
-								const blockStyle = {
-									"--mb-indent-level": indent,
-								} as CSSProperties;
-
 								const showPlaceholder =
 									Boolean(placeholder) &&
 									blocks.length === 1 &&
 									block.content.length === 0;
 								return (
-									<BlockTag
+									<EditorBlock
 										key={block.id}
-										data-block-id={block.id}
-										data-block-type={block.type}
-										data-indent={indent}
-										data-placeholder={showPlaceholder ? placeholder : undefined}
-										contentEditable={!readOnly}
-										suppressContentEditableWarning
-										className="mb-block"
-										style={blockStyle}
-										ref={(el: HTMLElement | null) => {
-											if (el) {
-												blocksRef.current.set(block.id, el);
-												if (
-													!isComposingRef.current &&
-													el.textContent !== block.content
-												) {
-													el.textContent = block.content;
-												}
-											} else {
-												blocksRef.current.delete(block.id);
-											}
-										}}
+										block={block}
+										dom={dom}
+										readOnly={!!readOnly}
+										placeholder={showPlaceholder ? placeholder : undefined}
 									/>
 								);
 							})}
