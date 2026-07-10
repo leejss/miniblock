@@ -40,3 +40,18 @@ export function createCollapsedSelection(
 		focus: { blockId, offset },
 	};
 }
+
+export function areEditorSelectionsEqual(
+	left: EditorSelection | null,
+	right: EditorSelection | null,
+): boolean {
+	if (left === right) return true;
+	if (!left || !right) return false;
+
+	return (
+		left.anchor.blockId === right.anchor.blockId &&
+		left.anchor.offset === right.anchor.offset &&
+		left.focus.blockId === right.focus.blockId &&
+		left.focus.offset === right.focus.offset
+	);
+}

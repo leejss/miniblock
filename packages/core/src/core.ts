@@ -14,8 +14,12 @@ import {
 	spliceBlocksHandler,
 } from "./handlers";
 import { createBlockId } from "./id";
-import { createCollapsedSelection, normalizeSelection } from "./selection";
-import { createEmptyState, normalizeState, validateState } from "./state";
+import {
+	areEditorSelectionsEqual,
+	createCollapsedSelection,
+	normalizeSelection,
+} from "./selection";
+import { createEmptyState, normalizeState } from "./state";
 import type {
 	BlockType,
 	EditorSelection,
@@ -42,7 +46,7 @@ export class MiniBlockCore {
 
 	constructor(initialState?: EditorState) {
 		this.state = initialState
-			? validateState(initialState)
+			? normalizeState(initialState)
 			: createEmptyState();
 
 		this.snapshot = this.createSnapshot();
@@ -52,7 +56,10 @@ export class MiniBlockCore {
 		const state = normalizeState(nextState);
 		const selection = normalizeSelection(state.blocks, this.selection);
 		const stateChanged = state !== this.state;
-		const selectionChanged = !isSelectionEqual(selection, this.selection);
+		const selectionChanged = !areEditorSelectionsEqual(
+			selection,
+			this.selection,
+		);
 
 		this.state = state;
 		this.selection = selection;
@@ -91,7 +98,7 @@ export class MiniBlockCore {
 		options?: { emit?: boolean },
 	) {
 		const nextSelection = normalizeSelection(this.state.blocks, selection);
-		if (isSelectionEqual(this.selection, nextSelection)) return;
+		if (areEditorSelectionsEqual(this.selection, nextSelection)) return;
 
 		this.selection = nextSelection;
 		this.snapshot = this.createSnapshot();
@@ -342,7 +349,10 @@ export class MiniBlockCore {
 			options.select,
 		);
 		const stateChanged = result.state !== this.state;
-		const selectionChanged = !isSelectionEqual(selection, this.selection);
+		const selectionChanged = !areEditorSelectionsEqual(
+			selection,
+			this.selection,
+		);
 
 		if (!stateChanged && !selectionChanged) return;
 
@@ -417,21 +427,6 @@ function applySelectionEffect(
 	return normalizeSelection(
 		blocks,
 		createCollapsedSelection(effect.blockId, effect.offset ?? 0),
-	);
-}
-
-function isSelectionEqual(
-	left: EditorSelection | null,
-	right: EditorSelection | null,
-) {
-	if (left === right) return true;
-	if (!left || !right) return false;
-
-	return (
-		left.anchor.blockId === right.anchor.blockId &&
-		left.anchor.offset === right.anchor.offset &&
-		left.focus.blockId === right.focus.blockId &&
-		left.focus.offset === right.focus.offset
 	);
 }
 
