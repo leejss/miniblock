@@ -1,16 +1,37 @@
-import { type EditorState, MiniBlockCore } from "@miniblock/core";
-import { useMemo, useRef, useSyncExternalStore } from "react";
+import type { EditorState } from "@miniblock/core";
+import { useEffect, useMemo, useRef } from "react";
+import { useStore } from "zustand";
+import {
+	type BlockEditorStoreApi,
+	type BlockEditorStoreController,
+	createBlockEditorStore,
+} from "../stores/block-editor-store";
 
 export type UseBlockEditorOptions = {
 	defaultValue?: EditorState;
 };
 
-export function useBlockEditor(options: UseBlockEditorOptions = {}) {
-	const editorRef = useRef<MiniBlockCore | null>(null);
-	if (!editorRef.current) {
-		editorRef.current = new MiniBlockCore(options.defaultValue);
+export function useBlockEditorStoreApi(
+	options: UseBlockEditorOptions = {},
+): BlockEditorStoreApi {
+	const controllerRef = useRef<BlockEditorStoreController | null>(null);
+	if (!controllerRef.current) {
+		controllerRef.current = createBlockEditorStore(options.defaultValue);
 	}
-	const editor = editorRef.current;
+	const controller = controllerRef.current;
+
+	useEffect(() => {
+		controller.connect();
+		return () => controller.dispose();
+	}, [controller]);
+
+	return controller.store;
+}
+
+export function useBlockEditor(options: UseBlockEditorOptions = {}) {
+	const store = useBlockEditorStoreApi(options);
+	const editor = useStore(store, (storeState) => storeState.editor);
+	const snapshot = useStore(store, (storeState) => storeState.snapshot);
 	const actions = useMemo(
 		() => ({
 			replaceText: editor.replaceText.bind(editor),
@@ -25,11 +46,7 @@ export function useBlockEditor(options: UseBlockEditorOptions = {}) {
 		}),
 		[editor],
 	);
-	const { state, selection } = useSyncExternalStore(
-		(onStoreChange) => editor.subscribe(onStoreChange),
-		() => editor.getSnapshot(),
-		() => editor.getSnapshot(),
-	);
+	const { state, selection } = snapshot;
 
 	return {
 		editor,

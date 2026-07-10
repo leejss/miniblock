@@ -26,7 +26,8 @@
 	},
 	"dependencies": {
 		"@miniblock/core": "workspace:*",
-		"@miniblock/dom": "workspace:*"
+		"@miniblock/dom": "workspace:*",
+		"zustand": "^5.0.14"
 	},
 	"devDependencies": {
 		"@types/react": "^19.0.0",

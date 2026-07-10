@@ -20,6 +20,7 @@ export default defineConfig({
 		},
 		rollupOptions: {
 			external: [
+				/^zustand(?:\/.*)?$/,
 				"react",
 				"react-dom",
 				"react/jsx-runtime",
