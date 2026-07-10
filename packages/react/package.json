@@ -25,7 +25,8 @@
 		"react-dom": "^18.0.0 || ^19.0.0"
 	},
 	"dependencies": {
-		"@miniblock/core": "workspace:*"
+		"@miniblock/core": "workspace:*",
+		"@miniblock/dom": "workspace:*"
 	},
 	"devDependencies": {
 		"@types/react": "^19.0.0",

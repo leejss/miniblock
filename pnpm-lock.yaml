@@ -64,11 +64,33 @@ importers:
         specifier: ^4.5.0
         version: 4.5.4(@types/node@25.9.1)(typescript@6.0.3)(vite@8.0.14(@types/node@25.9.1))
 
+  packages/dom:
+    dependencies:
+      '@miniblock/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@types/node':
+        specifier: ^25.9.1
+        version: 25.9.1
+      typescript:
+        specifier: ~6.0.2
+        version: 6.0.3
+      vite:
+        specifier: ^8.0.12
+        version: 8.0.14(@types/node@25.9.1)
+      vite-plugin-dts:
+        specifier: ^4.5.0
+        version: 4.5.4(@types/node@25.9.1)(typescript@6.0.3)(vite@8.0.14(@types/node@25.9.1))
+
   packages/react:
     dependencies:
       '@miniblock/core':
         specifier: workspace:*
         version: link:../core
+      '@miniblock/dom':
+        specifier: workspace:*
+        version: link:../dom
       react:
         specifier: ^18.0.0 || ^19.0.0
         version: 19.2.6
